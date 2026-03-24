@@ -9,7 +9,7 @@
   :root {
     --bg-deep:       #0d0b08;
     --bg-panel:      #1a1510;
-    --bg-panel-mid:  #221c14;h
+    --bg-panel-mid:  #221c14;hh
     --border-dim:    #3d3020;
     --border-glow:   #6b4f28;
     --parchment:     #c8a96e;
@@ -1597,6 +1597,17 @@ document.getElementById('mp-do-disconnect').addEventListener('click',()=>{
 });
 // Close dialog on backdrop click
 document.getElementById('mp-dialog').addEventListener('click',(e)=>{if(e.target===e.currentTarget)closeDialog();});
+
+// ── Auto-connect with random username ────────────────────────────
+(function autoConnect(){
+  const adjectives=['Swift','Bold','Grim','Arcane','Iron','Silent','Wild','Brave','Dark','Golden'];
+  const nouns=['Ranger','Wizard','Paladin','Rogue','Druid','Bard','Cleric','Warlock','Fighter','Monk'];
+  const randomName=adjectives[Math.floor(Math.random()*adjectives.length)]+nouns[Math.floor(Math.random()*nouns.length)];
+  const nameInput=document.getElementById('mp-name-input');
+  nameInput.value=randomName;
+  const url=document.getElementById('mp-url-input').value.trim();
+  wsConnect(url,randomName);
+})();
 </script>
 </body>
 </html>
