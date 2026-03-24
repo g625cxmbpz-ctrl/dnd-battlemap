@@ -1,0 +1,12 @@
+{
+  "name": "dungeon-cartographer-server",
+  "version": "5.0.0",
+  "description": "WebSocket relay server for Dungeon Cartographer multiplayer sessions",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  }
+}

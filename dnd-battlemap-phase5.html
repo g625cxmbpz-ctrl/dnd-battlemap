@@ -1,0 +1,1602 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DM Battle Map — Phase 5 Multiplayer</title>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel+Decorative:wght@400;700&family=Cinzel:wght@400;600&family=IM+Fell+English:ital@0;1&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg-deep:       #0d0b08;
+    --bg-panel:      #1a1510;
+    --bg-panel-mid:  #221c14;
+    --border-dim:    #3d3020;
+    --border-glow:   #6b4f28;
+    --parchment:     #c8a96e;
+    --parchment-dim: #8a6e42;
+    --ink:           #f0e0c0;
+    --ink-dim:       #9a8060;
+    --accent-gold:   #d4a843;
+    --accent-ember:  #c0541a;
+    --accent-shadow: #7a3010;
+    --panel-width:   240px;
+    --right-panel-w: 220px;
+    --toolbar-h:     52px;
+  }
+  *, *::before, *::after { box-sizing:border-box; margin:0; padding:0; }
+  html, body { width:100%; height:100%; overflow:hidden; background:var(--bg-deep); font-family:'Cinzel',serif; color:var(--ink); }
+
+  #app {
+    display:grid;
+    grid-template-rows:var(--toolbar-h) 1fr;
+    grid-template-columns:var(--panel-width) 1fr var(--right-panel-w);
+    grid-template-areas:"toolbar toolbar toolbar" "panel canvas rpanel";
+    width:100vw; height:100vh;
+  }
+
+  /* ── TOOLBAR ── */
+  #toolbar { grid-area:toolbar; display:flex; align-items:center; gap:8px; padding:0 12px; background:var(--bg-panel); border-bottom:1px solid var(--border-glow); box-shadow:0 2px 18px rgba(0,0,0,0.7); position:relative; z-index:10; overflow:hidden; }
+  #toolbar-title { font-family:'Cinzel Decorative',serif; font-size:13px; letter-spacing:0.1em; color:var(--accent-gold); text-shadow:0 0 12px rgba(212,168,67,0.4); white-space:nowrap; }
+  .toolbar-divider { width:1px; height:28px; background:var(--border-glow); opacity:0.5; flex-shrink:0; }
+  .toolbar-btn { display:flex; align-items:center; gap:5px; padding:5px 9px; background:transparent; border:1px solid var(--border-glow); border-radius:3px; color:var(--parchment-dim); font-family:'Cinzel',serif; font-size:10px; letter-spacing:0.05em; cursor:pointer; transition:all 0.15s ease; white-space:nowrap; flex-shrink:0; }
+  .toolbar-btn:hover { background:var(--bg-panel-mid); color:var(--ink); border-color:var(--accent-gold); box-shadow:0 0 8px rgba(212,168,67,0.2); }
+  .toolbar-btn:disabled { opacity:0.3; cursor:not-allowed; }
+  .toolbar-btn.active-mode { background:#2a1f0f; border-color:var(--accent-gold); color:var(--accent-gold); }
+  .toolbar-btn svg { flex-shrink:0; }
+  #grid-size-wrap { display:flex; align-items:center; gap:6px; margin-left:auto; font-size:10px; color:var(--ink-dim); flex-shrink:0; }
+  #grid-size-input { width:42px; padding:3px 4px; background:var(--bg-panel-mid); border:1px solid var(--border-glow); border-radius:3px; color:var(--ink); font-family:'Cinzel',serif; font-size:10px; text-align:center; outline:none; }
+  #grid-size-input:focus { border-color:var(--accent-gold); }
+  #zoom-display { font-size:10px; color:var(--ink-dim); min-width:36px; text-align:right; flex-shrink:0; }
+  .toggle-wrap { display:flex; align-items:center; gap:5px; font-size:10px; color:var(--ink-dim); cursor:pointer; user-select:none; flex-shrink:0; }
+  .toggle-wrap input[type=checkbox] { display:none; }
+  .toggle-track { width:28px; height:14px; background:var(--bg-panel-mid); border:1px solid var(--border-glow); border-radius:7px; position:relative; transition:background 0.2s; }
+  .toggle-wrap input:checked + .toggle-track { background:var(--accent-shadow); border-color:var(--accent-gold); }
+  .toggle-thumb { position:absolute; top:2px; left:2px; width:8px; height:8px; border-radius:50%; background:var(--parchment-dim); transition:left 0.2s, background 0.2s; }
+  .toggle-wrap input:checked + .toggle-track .toggle-thumb { left:16px; background:var(--accent-gold); }
+
+  /* ── LEFT PANEL ── */
+  #panel { grid-area:panel; background:var(--bg-panel); border-right:1px solid var(--border-glow); display:flex; flex-direction:column; overflow:hidden; position:relative; z-index:5; }
+  #panel::before { content:''; display:block; height:3px; background:linear-gradient(90deg,transparent,var(--accent-gold),transparent); opacity:0.6; flex-shrink:0; }
+  #panel-tabs { display:flex; border-bottom:1px solid var(--border-glow); flex-shrink:0; }
+  .panel-tab { flex:1; padding:8px 3px; font-family:'Cinzel',serif; font-size:8px; letter-spacing:0.1em; text-transform:uppercase; color:var(--ink-dim); cursor:pointer; text-align:center; transition:all 0.15s; border-bottom:2px solid transparent; user-select:none; }
+  .panel-tab:hover { color:var(--parchment); }
+  .panel-tab.active { color:var(--accent-gold); border-bottom-color:var(--accent-gold); }
+  .panel-page { display:none; flex-direction:column; flex:1; overflow:hidden; }
+  .panel-page.active { display:flex; }
+  .panel-section { padding:10px 12px 8px; border-bottom:1px solid var(--border-dim); flex-shrink:0; }
+  .panel-heading { font-family:'Cinzel',serif; font-size:8px; letter-spacing:0.2em; text-transform:uppercase; color:var(--parchment-dim); margin-bottom:8px; }
+
+  /* ── TOOL BUTTONS ── */
+  #tool-buttons { display:flex; gap:4px; }
+  .tool-btn { flex:1; display:flex; flex-direction:column; align-items:center; gap:3px; padding:6px 3px 5px; background:var(--bg-panel-mid); border:1px solid var(--border-dim); border-radius:4px; color:var(--ink-dim); font-family:'Cinzel',serif; font-size:7.5px; letter-spacing:0.07em; cursor:pointer; transition:all 0.15s; user-select:none; }
+  .tool-btn:hover { border-color:var(--border-glow); color:var(--parchment); }
+  .tool-btn.active { background:#2a1f0f; border-color:var(--accent-gold); color:var(--accent-gold); box-shadow:0 0 8px rgba(212,168,67,0.2) inset; }
+  .tool-btn svg { flex-shrink:0; }
+
+  /* ── TERRAIN PALETTE ── */
+  #terrain-palette { flex:1; overflow-y:auto; overflow-x:hidden; scrollbar-width:thin; scrollbar-color:var(--border-glow) transparent; }
+  #terrain-palette::-webkit-scrollbar { width:4px; }
+  #terrain-palette::-webkit-scrollbar-thumb { background:var(--border-glow); border-radius:2px; }
+  .terrain-group-label { font-family:'Cinzel',serif; font-size:7px; letter-spacing:0.18em; text-transform:uppercase; color:var(--ink-dim); padding:7px 12px 3px; opacity:0.6; }
+  .terrain-grid { display:grid; grid-template-columns:1fr 1fr; gap:4px; padding:0 9px 7px; }
+  .terrain-swatch { display:flex; flex-direction:column; align-items:center; gap:3px; padding:5px 3px 4px; border:1px solid var(--border-dim); border-radius:4px; cursor:pointer; transition:all 0.12s; background:var(--bg-panel-mid); user-select:none; }
+  .terrain-swatch:hover { border-color:var(--border-glow); }
+  .terrain-swatch.selected { border-color:var(--accent-gold); background:#2a1f0f; box-shadow:0 0 8px rgba(212,168,67,0.15) inset; }
+  .swatch-preview { width:32px; height:32px; border-radius:3px; border:1px solid rgba(0,0,0,0.4); flex-shrink:0; position:relative; overflow:hidden; }
+  .swatch-preview canvas { position:absolute; top:0; left:0; width:100%; height:100%; }
+  .swatch-label { font-family:'IM Fell English',serif; font-size:9px; color:var(--ink-dim); text-align:center; line-height:1.2; }
+  .terrain-swatch.selected .swatch-label { color:var(--parchment); }
+
+  /* ── TOKEN TAB ── */
+  .token-type-buttons { display:flex; gap:4px; padding:10px 12px 0; flex-shrink:0; }
+  .token-type-btn { flex:1; padding:5px 2px; background:var(--bg-panel-mid); border:1px solid var(--border-dim); border-radius:3px; color:var(--ink-dim); font-family:'Cinzel',serif; font-size:7.5px; letter-spacing:0.07em; cursor:pointer; transition:all 0.15s; text-align:center; user-select:none; }
+  .token-type-btn:hover { border-color:var(--border-glow); color:var(--parchment); }
+  .token-type-btn.active { border-color:var(--accent-gold); color:var(--accent-gold); background:#2a1f0f; }
+  #token-color-row { display:flex; align-items:center; gap:5px; padding:8px 12px 0; flex-wrap:wrap; flex-shrink:0; }
+  #token-color-row label { font-family:'IM Fell English',serif; font-size:11px; color:var(--ink-dim); }
+  .color-swatch { width:17px; height:17px; border-radius:3px; border:2px solid transparent; cursor:pointer; flex-shrink:0; transition:border-color 0.12s; }
+  .color-swatch.selected { border-color:var(--accent-gold); }
+  #token-size-row { display:flex; align-items:center; gap:6px; padding:7px 12px 0; flex-shrink:0; }
+  #token-size-row label { font-family:'IM Fell English',serif; font-size:11px; color:var(--ink-dim); }
+  .size-btn { padding:2px 6px; background:var(--bg-panel-mid); border:1px solid var(--border-dim); border-radius:3px; color:var(--ink-dim); font-family:'Cinzel',serif; font-size:8px; cursor:pointer; transition:all 0.12s; user-select:none; }
+  .size-btn:hover { border-color:var(--border-glow); }
+  .size-btn.active { border-color:var(--accent-gold); color:var(--accent-gold); background:#2a1f0f; }
+  #token-name-row { display:flex; flex-direction:column; gap:4px; padding:7px 12px 0; flex-shrink:0; }
+  .token-input { padding:4px 7px; background:var(--bg-panel-mid); border:1px solid var(--border-dim); border-radius:3px; color:var(--ink); font-family:'IM Fell English',serif; font-size:12px; outline:none; width:100%; transition:border-color 0.15s; }
+  .token-input:focus { border-color:var(--accent-gold); }
+  .token-input::placeholder { color:var(--ink-dim); opacity:0.5; font-style:italic; }
+  .token-input-label { font-family:'Cinzel',serif; font-size:7.5px; letter-spacing:0.12em; color:var(--parchment-dim); text-transform:uppercase; }
+  #btn-add-token { margin:9px 12px 0; padding:7px 0; width:calc(100% - 24px); background:#2a1f0f; border:1px solid var(--accent-gold); border-radius:3px; color:var(--accent-gold); font-family:'Cinzel',serif; font-size:9px; letter-spacing:0.1em; cursor:pointer; transition:all 0.15s; text-transform:uppercase; flex-shrink:0; }
+  #btn-add-token:hover { background:#3a2a12; box-shadow:0 0 10px rgba(212,168,67,0.2); }
+  #token-list-wrap { flex:1; overflow-y:auto; overflow-x:hidden; padding:8px 0 0; scrollbar-width:thin; scrollbar-color:var(--border-glow) transparent; }
+  #token-list-wrap::-webkit-scrollbar { width:4px; }
+  #token-list-wrap::-webkit-scrollbar-thumb { background:var(--border-glow); border-radius:2px; }
+  #token-list-label { font-family:'Cinzel',serif; font-size:7.5px; letter-spacing:0.15em; text-transform:uppercase; color:var(--parchment-dim); padding:0 12px 5px; opacity:0.7; }
+  .token-list-item { display:flex; align-items:center; gap:6px; padding:5px 10px; cursor:pointer; transition:background 0.1s; border-left:2px solid transparent; }
+  .token-list-item:hover { background:rgba(255,255,255,0.03); }
+  .token-list-item.selected { background:rgba(212,168,67,0.07); border-left-color:var(--accent-gold); }
+  .token-list-dot { width:13px; height:13px; border-radius:50%; flex-shrink:0; border:1.5px solid rgba(255,255,255,0.3); }
+  .token-list-name { font-family:'IM Fell English',serif; font-size:11px; color:var(--ink-dim); flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .token-list-item.selected .token-list-name { color:var(--ink); }
+  .token-list-type { font-family:'Cinzel',serif; font-size:7px; color:var(--ink-dim); opacity:0.5; text-transform:uppercase; }
+  .token-list-del { width:14px; height:14px; display:flex; align-items:center; justify-content:center; opacity:0; transition:opacity 0.1s; cursor:pointer; color:var(--accent-ember); font-size:12px; }
+  .token-list-item:hover .token-list-del { opacity:0.7; }
+  .token-list-del:hover { opacity:1 !important; }
+
+  /* ── FOG TAB ── */
+  #fog-page { padding:0; }
+  .fog-section { padding:10px 12px 8px; border-bottom:1px solid var(--border-dim); flex-shrink:0; }
+  .fog-tool-buttons { display:flex; gap:4px; }
+  .fog-tool-btn { flex:1; display:flex; flex-direction:column; align-items:center; gap:3px; padding:7px 4px 6px; background:var(--bg-panel-mid); border:1px solid var(--border-dim); border-radius:4px; color:var(--ink-dim); font-family:'Cinzel',serif; font-size:7.5px; cursor:pointer; transition:all 0.15s; user-select:none; text-align:center; }
+  .fog-tool-btn:hover { border-color:var(--border-glow); color:var(--parchment); }
+  .fog-tool-btn.active { background:#0f1a2a; border-color:#4a8ab0; color:#7ab8d8; box-shadow:0 0 8px rgba(74,138,176,0.2) inset; }
+  .fog-brush-row { display:flex; align-items:center; gap:8px; padding:8px 12px 0; flex-shrink:0; }
+  .fog-brush-row label { font-family:'IM Fell English',serif; font-size:11px; color:var(--ink-dim); white-space:nowrap; }
+  .fog-brush-row input[type=range] { flex:1; accent-color:var(--accent-gold); }
+  #fog-brush-val { font-family:'Cinzel',serif; font-size:10px; color:var(--parchment); min-width:16px; text-align:right; }
+  .fog-action-btn { display:block; margin:8px 12px 0; padding:6px 0; width:calc(100% - 24px); background:transparent; border:1px solid var(--border-glow); border-radius:3px; color:var(--parchment-dim); font-family:'Cinzel',serif; font-size:8.5px; letter-spacing:0.08em; cursor:pointer; transition:all 0.15s; text-transform:uppercase; }
+  .fog-action-btn:hover { border-color:var(--accent-gold); color:var(--ink); background:var(--bg-panel-mid); }
+  .fog-action-btn.danger { border-color:var(--accent-ember); color:var(--accent-ember); }
+  .fog-action-btn.danger:hover { background:rgba(192,84,26,0.1); }
+  .fog-player-view-wrap { padding:8px 12px; display:flex; align-items:center; gap:8px; border-top:1px solid var(--border-dim); }
+  .fog-player-view-wrap label { font-family:'IM Fell English',serif; font-size:11px; color:var(--ink-dim); flex:1; }
+  .fog-legend { padding:8px 12px; }
+  .fog-legend-row { display:flex; align-items:center; gap:6px; margin-bottom:5px; font-family:'IM Fell English',serif; font-size:10px; color:var(--ink-dim); }
+  .fog-legend-dot { width:12px; height:12px; border-radius:2px; flex-shrink:0; }
+
+  /* ── SAVE/EXPORT TAB ── */
+  #saveload-page { padding:0; }
+  .saveload-section { padding:10px 12px 8px; border-bottom:1px solid var(--border-dim); flex-shrink:0; }
+  .saveload-btn { display:flex; align-items:center; gap:6px; width:100%; margin-bottom:6px; padding:7px 10px; background:var(--bg-panel-mid); border:1px solid var(--border-glow); border-radius:3px; color:var(--parchment-dim); font-family:'Cinzel',serif; font-size:9px; letter-spacing:0.07em; cursor:pointer; transition:all 0.15s; text-transform:uppercase; }
+  .saveload-btn:hover { background:#2a1f0f; border-color:var(--accent-gold); color:var(--ink); }
+  .saveload-btn:last-child { margin-bottom:0; }
+  .saveload-btn svg { flex-shrink:0; }
+  #save-status { padding:6px 12px 0; font-family:'IM Fell English',serif; font-style:italic; font-size:11px; color:var(--ink-dim); min-height:18px; }
+  #map-name-wrap { padding:8px 12px 0; flex-shrink:0; }
+  .map-name-input { width:100%; padding:5px 8px; background:var(--bg-panel-mid); border:1px solid var(--border-dim); border-radius:3px; color:var(--ink); font-family:'IM Fell English',serif; font-size:12px; outline:none; transition:border-color 0.15s; }
+  .map-name-input:focus { border-color:var(--accent-gold); }
+
+  /* ── MAP/INFO PAGE ── */
+  .info-row { display:flex; justify-content:space-between; font-family:'IM Fell English',serif; font-size:11px; color:var(--ink-dim); margin-bottom:3px; }
+  .info-val { color:var(--parchment); font-variant-numeric:tabular-nums; }
+
+  /* ── KEY HINTS ── */
+  #key-hints { padding:8px 12px; border-top:1px solid var(--border-dim); background:var(--bg-deep); flex-shrink:0; }
+  .hint-row { display:flex; align-items:center; gap:5px; margin-bottom:3px; font-family:'IM Fell English',serif; font-size:10px; color:var(--ink-dim); }
+  .hint-row:last-child { margin-bottom:0; }
+  .key { display:inline-flex; align-items:center; justify-content:center; min-width:18px; height:15px; padding:0 3px; background:var(--bg-panel-mid); border:1px solid var(--border-glow); border-radius:2px; font-family:'Cinzel',serif; font-size:8px; color:var(--parchment); flex-shrink:0; }
+
+  /* ── RIGHT PANEL ── */
+  #rpanel { grid-area:rpanel; background:var(--bg-panel); border-left:1px solid var(--border-glow); display:flex; flex-direction:column; overflow:hidden; position:relative; z-index:5; }
+  #rpanel::before { content:''; display:block; height:3px; background:linear-gradient(90deg,transparent,var(--accent-gold),transparent); opacity:0.6; flex-shrink:0; }
+  #rpanel-tabs { display:flex; border-bottom:1px solid var(--border-glow); flex-shrink:0; }
+  .rpanel-tab { flex:1; padding:8px 3px; font-family:'Cinzel',serif; font-size:8px; letter-spacing:0.08em; text-transform:uppercase; color:var(--ink-dim); cursor:pointer; text-align:center; transition:all 0.15s; border-bottom:2px solid transparent; user-select:none; }
+  .rpanel-tab:hover { color:var(--parchment); }
+  .rpanel-tab.active { color:var(--accent-gold); border-bottom-color:var(--accent-gold); }
+  .rpanel-page { display:none; flex-direction:column; flex:1; overflow:hidden; }
+  .rpanel-page.active { display:flex; }
+
+  /* ── TOKEN EDITOR ── */
+  #editor-empty { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; padding:20px; text-align:center; opacity:0.35; }
+  #editor-empty p { font-family:'IM Fell English',serif; font-style:italic; font-size:11px; color:var(--ink-dim); line-height:1.6; margin-top:10px; }
+  #editor-content { flex:1; display:none; flex-direction:column; overflow-y:auto; scrollbar-width:thin; scrollbar-color:var(--border-glow) transparent; }
+  #editor-content.visible { display:flex; }
+  #editor-content::-webkit-scrollbar { width:4px; }
+  #editor-content::-webkit-scrollbar-thumb { background:var(--border-glow); border-radius:2px; }
+  .editor-section { padding:10px 12px 8px; border-bottom:1px solid var(--border-dim); }
+  .editor-label { font-family:'Cinzel',serif; font-size:7.5px; letter-spacing:0.15em; text-transform:uppercase; color:var(--parchment-dim); margin-bottom:5px; }
+  #editor-preview-wrap { display:flex; align-items:center; justify-content:center; padding:12px 12px 8px; border-bottom:1px solid var(--border-dim); flex-shrink:0; }
+  .editor-input { width:100%; padding:5px 8px; background:var(--bg-panel-mid); border:1px solid var(--border-dim); border-radius:3px; color:var(--ink); font-family:'IM Fell English',serif; font-size:12px; outline:none; transition:border-color 0.15s; }
+  .editor-input:focus { border-color:var(--accent-gold); }
+  .editor-input::placeholder { color:var(--ink-dim); opacity:0.5; font-style:italic; }
+  #hp-row { display:flex; align-items:center; gap:6px; }
+  #hp-current { width:52px; } #hp-sep { font-family:'IM Fell English',serif; font-size:13px; color:var(--ink-dim); } #hp-max { width:52px; }
+  .hp-bar-wrap { margin-top:5px; height:6px; background:var(--bg-deep); border-radius:3px; overflow:hidden; border:1px solid var(--border-dim); }
+  #hp-bar-fill { height:100%; border-radius:3px; transition:width 0.3s, background 0.3s; }
+  #conditions-wrap { display:flex; flex-wrap:wrap; gap:4px; }
+  .condition-badge { padding:2px 6px; border-radius:2px; cursor:pointer; user-select:none; font-family:'Cinzel',serif; font-size:7px; letter-spacing:0.08em; text-transform:uppercase; border:1px solid var(--border-dim); color:var(--ink-dim); background:var(--bg-panel-mid); transition:all 0.12s; }
+  .condition-badge.active { border-color:var(--accent-ember); color:var(--accent-ember); background:rgba(192,84,26,0.15); }
+  .editor-color-row { display:flex; gap:5px; flex-wrap:wrap; }
+  .editor-color-swatch { width:20px; height:20px; border-radius:3px; border:2px solid transparent; cursor:pointer; transition:border-color 0.12s; }
+  .editor-color-swatch.selected { border-color:var(--accent-gold); }
+  #btn-delete-token { margin:10px 12px 12px; padding:6px 0; background:transparent; border:1px solid var(--accent-ember); border-radius:3px; color:var(--accent-ember); font-family:'Cinzel',serif; font-size:8.5px; letter-spacing:0.1em; cursor:pointer; transition:all 0.15s; text-transform:uppercase; }
+  #btn-delete-token:hover { background:rgba(192,84,26,0.12); }
+
+  /* ── INITIATIVE ── */
+  #initiative-controls { display:flex; align-items:center; gap:6px; padding:9px 12px 8px; border-bottom:1px solid var(--border-dim); flex-shrink:0; }
+  #btn-roll-all { flex:1; padding:5px 0; background:#2a1f0f; border:1px solid var(--accent-gold); border-radius:3px; color:var(--accent-gold); font-family:'Cinzel',serif; font-size:8px; letter-spacing:0.1em; cursor:pointer; transition:all 0.15s; text-transform:uppercase; }
+  #btn-roll-all:hover { background:#3a2a12; }
+  #btn-next-turn { flex:1; padding:5px 0; background:transparent; border:1px solid var(--border-glow); border-radius:3px; color:var(--parchment-dim); font-family:'Cinzel',serif; font-size:8px; letter-spacing:0.1em; cursor:pointer; transition:all 0.15s; text-transform:uppercase; }
+  #btn-next-turn:hover { border-color:var(--accent-gold); color:var(--ink); }
+  #turn-counter { font-family:'IM Fell English',serif; font-size:11px; color:var(--ink-dim); white-space:nowrap; }
+  #initiative-list { flex:1; overflow-y:auto; padding:4px 0; scrollbar-width:thin; scrollbar-color:var(--border-glow) transparent; }
+  #initiative-list::-webkit-scrollbar { width:4px; }
+  #initiative-list::-webkit-scrollbar-thumb { background:var(--border-glow); border-radius:2px; }
+  .init-row { display:flex; align-items:center; gap:7px; padding:6px 12px; cursor:pointer; transition:background 0.1s; }
+  .init-row:hover { background:rgba(255,255,255,0.03); }
+  .init-row.current-turn { background:rgba(212,168,67,0.1); border-left:3px solid var(--accent-gold); padding-left:9px; }
+  .init-score { width:26px; height:26px; border-radius:4px; flex-shrink:0; display:flex; align-items:center; justify-content:center; font-family:'Cinzel',serif; font-size:12px; color:var(--ink); border:1px solid var(--border-dim); background:var(--bg-panel-mid); }
+  .init-score input { width:100%; background:transparent; border:none; outline:none; font-family:'Cinzel',serif; font-size:12px; color:var(--ink); text-align:center; }
+  .init-dot { width:12px; height:12px; border-radius:50%; flex-shrink:0; border:1.5px solid rgba(255,255,255,0.25); }
+  .init-name { flex:1; font-family:'IM Fell English',serif; font-size:12px; color:var(--ink-dim); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .init-row.current-turn .init-name { color:var(--ink); }
+  .init-hp { font-family:'Cinzel',serif; font-size:9px; color:var(--ink-dim); }
+  .init-row.current-turn .init-hp { color:var(--parchment); }
+
+  /* ── CANVAS ── */
+  #canvas-wrap { grid-area:canvas; position:relative; overflow:hidden; background:var(--bg-deep); cursor:crosshair; }
+  #canvas-wrap.panning { cursor:grabbing; }
+  #canvas-wrap.tool-fill { cursor:cell; }
+  #canvas-wrap.tool-eraser { cursor:cell; }
+  #canvas-wrap.dragging-token { cursor:grabbing; }
+  #canvas-wrap.measuring { cursor:crosshair; }
+  #canvas-wrap.fog-painting { cursor:none; }
+  #map-canvas { position:absolute; top:0; left:0; image-rendering:pixelated; }
+  #coord-tip { position:absolute; bottom:12px; right:14px; font-family:'IM Fell English',serif; font-size:11px; color:var(--parchment-dim); pointer-events:none; text-shadow:0 1px 4px rgba(0,0,0,0.8); opacity:0; transition:opacity 0.2s; }
+  #canvas-wrap:hover #coord-tip { opacity:1; }
+  #canvas-vignette { position:absolute; inset:0; pointer-events:none; background:radial-gradient(ellipse at center,transparent 55%,rgba(0,0,0,0.55) 100%); z-index:2; }
+
+  /* Player view overlay */
+  #player-view-banner { display:none; position:absolute; top:10px; left:50%; transform:translateX(-50%); background:rgba(10,30,50,0.9); border:1px solid #4a8ab0; border-radius:4px; padding:5px 16px; font-family:'Cinzel',serif; font-size:10px; letter-spacing:0.1em; color:#7ab8d8; pointer-events:none; z-index:5; white-space:nowrap; }
+  #player-view-banner.visible { display:block; }
+
+  /* Measure readout */
+  #measure-tip { display:none; position:absolute; top:14px; left:50%; transform:translateX(-50%); background:rgba(13,11,8,0.9); border:1px solid var(--accent-gold); border-radius:4px; padding:4px 14px; font-family:'Cinzel',serif; font-size:11px; letter-spacing:0.08em; color:var(--accent-gold); pointer-events:none; z-index:5; white-space:nowrap; }
+  #measure-tip.visible { display:block; }
+
+  @keyframes fadeUp { from{opacity:0;transform:translateY(6px)} to{opacity:1;transform:translateY(0)} }
+  #toolbar { animation:fadeUp 0.4s ease both; }
+  #panel   { animation:fadeUp 0.5s 0.08s ease both; }
+  #rpanel  { animation:fadeUp 0.5s 0.12s ease both; }
+  #canvas-wrap { animation:fadeUp 0.5s 0.14s ease both; }
+
+  /* ── MULTIPLAYER ── */
+  #mp-wrap { display:flex; align-items:center; gap:7px; flex-shrink:0; }
+  .mp-dot { width:8px; height:8px; border-radius:50%; flex-shrink:0; transition:background 0.3s; }
+  .mp-dot.disconnected { background:#444; }
+  .mp-dot.connecting   { background:var(--accent-gold); animation:mpPulse 0.8s ease-in-out infinite; }
+  .mp-dot.connected    { background:#28a028; box-shadow:0 0 6px rgba(40,160,40,0.7); }
+  .mp-dot.error        { background:var(--accent-ember); }
+  #mp-label { font-size:10px; color:var(--ink-dim); white-space:nowrap; }
+  @keyframes mpPulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+  #mp-dialog { display:none; position:fixed; inset:0; z-index:200; background:rgba(0,0,0,0.78); align-items:center; justify-content:center; }
+  #mp-dialog.open { display:flex; }
+  .mp-box { background:var(--bg-panel); border:1px solid var(--border-glow); border-radius:6px; padding:22px 26px; min-width:300px; display:flex; flex-direction:column; gap:11px; box-shadow:0 8px 40px rgba(0,0,0,0.8); }
+  .mp-box-title { font-family:'Cinzel Decorative',serif; font-size:13px; color:var(--accent-gold); letter-spacing:0.08em; }
+  .mp-field { display:flex; flex-direction:column; gap:4px; }
+  .mp-field label { font-family:'Cinzel',serif; font-size:7.5px; letter-spacing:0.18em; text-transform:uppercase; color:var(--parchment-dim); }
+  .mp-field input { padding:5px 8px; background:var(--bg-panel-mid); border:1px solid var(--border-dim); border-radius:3px; color:var(--ink); font-family:'IM Fell English',serif; font-size:12px; outline:none; transition:border-color 0.15s; }
+  .mp-field input:focus { border-color:var(--accent-gold); }
+  #mp-status-msg { font-family:'IM Fell English',serif; font-style:italic; font-size:11px; color:var(--ink-dim); min-height:15px; }
+  .mp-btn-row { display:flex; gap:8px; }
+  .mp-btn { flex:1; padding:7px 0; border-radius:3px; font-family:'Cinzel',serif; font-size:9px; letter-spacing:0.1em; cursor:pointer; transition:all 0.15s; text-transform:uppercase; }
+  .mp-btn.primary { background:#2a1f0f; border:1px solid var(--accent-gold); color:var(--accent-gold); }
+  .mp-btn.primary:hover { background:#3a2a12; box-shadow:0 0 10px rgba(212,168,67,0.2); }
+  .mp-btn.secondary { background:transparent; border:1px solid var(--border-glow); color:var(--parchment-dim); }
+  .mp-btn.secondary:hover { border-color:var(--accent-gold); color:var(--ink); }
+  .mp-btn.danger { background:transparent; border:1px solid var(--accent-ember); color:var(--accent-ember); }
+  .mp-btn.danger:hover { background:rgba(192,84,26,0.12); }
+  #mp-user-list { display:flex; flex-direction:column; gap:4px; max-height:100px; overflow-y:auto; }
+  .mp-user-row { display:flex; align-items:center; gap:6px; font-family:'IM Fell English',serif; font-size:11px; color:var(--ink-dim); }
+  .mp-user-dot { width:10px; height:10px; border-radius:50%; flex-shrink:0; border:1px solid rgba(255,255,255,0.2); }
+  .mp-user-you { font-family:'Cinzel',serif; font-size:7px; color:var(--accent-gold); }
+</style>
+</head>
+<body>
+<div id="app">
+
+<!-- ══ TOOLBAR ══ -->
+<div id="toolbar">
+  <span id="toolbar-title">⚔ Dungeon Cartographer</span>
+  <div class="toolbar-divider"></div>
+  <button class="toolbar-btn" id="btn-new">
+    <svg width="11" height="11" viewBox="0 0 11 11" fill="none"><rect x="1" y="1" width="9" height="9" rx="1.5" stroke="currentColor" stroke-width="1.1"/><line x1="3" y1="5.5" x2="8" y2="5.5" stroke="currentColor" stroke-width="1.1"/><line x1="5.5" y1="3" x2="5.5" y2="8" stroke="currentColor" stroke-width="1.1"/></svg>
+    New
+  </button>
+  <button class="toolbar-btn" id="btn-undo" disabled>
+    <svg width="11" height="11" viewBox="0 0 11 11" fill="none"><path d="M1.5 4.5C1.5 2.8 3 1.5 4.8 1.5c1.2 0 2.2.7 2.7 1.7" stroke="currentColor" stroke-width="1.1" stroke-linecap="round"/><polyline points="1.5,2.5 1.5,5 4,5" stroke="currentColor" stroke-width="1.1" stroke-linejoin="round" fill="none"/></svg>
+    Undo
+  </button>
+  <button class="toolbar-btn" id="btn-redo" disabled>
+    <svg width="11" height="11" viewBox="0 0 11 11" fill="none"><path d="M9.5 4.5C9.5 2.8 8 1.5 6.2 1.5c-1.2 0-2.2.7-2.7 1.7" stroke="currentColor" stroke-width="1.1" stroke-linecap="round"/><polyline points="9.5,2.5 9.5,5 7,5" stroke="currentColor" stroke-width="1.1" stroke-linejoin="round" fill="none"/></svg>
+    Redo
+  </button>
+  <div class="toolbar-divider"></div>
+  <button class="toolbar-btn" id="btn-measure">
+    <svg width="11" height="11" viewBox="0 0 11 11" fill="none"><line x1="1.5" y1="5.5" x2="9.5" y2="5.5" stroke="currentColor" stroke-width="1.1"/><line x1="1.5" y1="3.5" x2="1.5" y2="7.5" stroke="currentColor" stroke-width="1.1"/><line x1="9.5" y1="3.5" x2="9.5" y2="7.5" stroke="currentColor" stroke-width="1.1"/><line x1="5.5" y1="4.5" x2="5.5" y2="6.5" stroke="currentColor" stroke-width="1.1"/></svg>
+    Measure
+  </button>
+  <div class="toolbar-divider"></div>
+  <button class="toolbar-btn" id="btn-reset-view">
+    <svg width="11" height="11" viewBox="0 0 11 11" fill="none"><circle cx="5.5" cy="5.5" r="4" stroke="currentColor" stroke-width="1.1"/><circle cx="5.5" cy="5.5" r="1.2" fill="currentColor"/></svg>
+    Reset View
+  </button>
+  <div class="toolbar-divider"></div>
+  <label class="toggle-wrap">
+    <input type="checkbox" id="toggle-grid" checked>
+    <span class="toggle-track"><span class="toggle-thumb"></span></span>
+    Grid
+  </label>
+  <div id="grid-size-wrap">
+    <label for="grid-size-input">ft:</label>
+    <input type="number" id="grid-size-input" value="5" min="1" max="100" step="5">
+  </div>
+  <div id="zoom-display">100%</div>
+  <button class="toolbar-btn" id="btn-reset-zoom">
+    <svg width="11" height="11" viewBox="0 0 11 11" fill="none"><circle cx="4.5" cy="4.5" r="3" stroke="currentColor" stroke-width="1.1"/><line x1="7" y1="7" x2="10" y2="10" stroke="currentColor" stroke-width="1.2"/><line x1="3" y1="4.5" x2="6" y2="4.5" stroke="currentColor" stroke-width="1.1"/></svg>
+    100%
+  </button>
+  <div class="toolbar-divider"></div>
+  <div id="mp-wrap">
+    <div id="mp-dot" class="mp-dot disconnected"></div>
+    <span id="mp-label">Offline</span>
+    <button class="toolbar-btn" id="btn-mp-session">
+      <svg width="11" height="11" viewBox="0 0 11 11" fill="none"><circle cx="5.5" cy="4" r="2" stroke="currentColor" stroke-width="1.1"/><circle cx="2" cy="8.5" r="1.5" stroke="currentColor" stroke-width="1"/><circle cx="9" cy="8.5" r="1.5" stroke="currentColor" stroke-width="1"/><line x1="3.5" y1="8.5" x2="7.5" y2="8.5" stroke="currentColor" stroke-width="1" stroke-dasharray="1.5 1"/></svg>
+      Session
+    </button>
+  </div>
+</div>
+
+<!-- ══ LEFT PANEL ══ -->
+<div id="panel">
+  <div id="panel-tabs">
+    <div class="panel-tab active" data-page="terrain-page">Terrain</div>
+    <div class="panel-tab" data-page="token-page">Tokens</div>
+    <div class="panel-tab" data-page="fog-page">Fog</div>
+    <div class="panel-tab" data-page="saveload-page">Files</div>
+  </div>
+
+  <!-- TERRAIN PAGE -->
+  <div class="panel-page active" id="terrain-page">
+    <div class="panel-section">
+      <div class="panel-heading">Tool</div>
+      <div id="tool-buttons">
+        <button class="tool-btn active" data-tool="paint">
+          <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><path d="M2.5 10.5L8.5 4.5l2 2L4.5 12.5z" stroke="currentColor" stroke-width="1"/><path d="M8.5 4.5l1.2-1.2a.8.8 0 011.1 1.1L9.5 5.6" stroke="currentColor" stroke-width="1" stroke-linecap="round"/></svg>
+          Paint
+        </button>
+        <button class="tool-btn" data-tool="fill">
+          <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><path d="M1.5 9L6 2.5l4.5 6.5H1.5z" stroke="currentColor" stroke-width="1" fill="none"/><rect x="9" y="9" width="2.5" height="2.5" rx="0.4" fill="currentColor" opacity="0.5"/></svg>
+          Fill
+        </button>
+        <button class="tool-btn" data-tool="eraser">
+          <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><rect x="1.5" y="5" width="10" height="5.5" rx="1" stroke="currentColor" stroke-width="1" fill="none"/><line x1="6.5" y1="5" x2="6.5" y2="10.5" stroke="currentColor" stroke-width="1"/></svg>
+          Erase
+        </button>
+      </div>
+    </div>
+    <div id="terrain-palette"></div>
+  </div>
+
+  <!-- TOKEN PAGE -->
+  <div class="panel-page" id="token-page">
+    <div style="padding:10px 12px 6px;flex-shrink:0;">
+      <div class="panel-heading">Type</div>
+      <div class="token-type-buttons">
+        <div class="token-type-btn active" data-ttype="player">Player</div>
+        <div class="token-type-btn" data-ttype="enemy">Enemy</div>
+        <div class="token-type-btn" data-ttype="npc">NPC</div>
+        <div class="token-type-btn" data-ttype="marker">Marker</div>
+      </div>
+    </div>
+    <div id="token-color-row"><label>Color</label></div>
+    <div id="token-size-row">
+      <label>Size</label>
+      <div class="size-btn active" data-size="1">1×1</div>
+      <div class="size-btn" data-size="2">2×2</div>
+      <div class="size-btn" data-size="3">3×3</div>
+    </div>
+    <div id="token-name-row">
+      <div class="token-input-label">Name</div>
+      <input class="token-input" id="new-token-name" type="text" placeholder="Goblin, Aria…" maxlength="30">
+      <div class="token-input-label" style="margin-top:5px;">Label (1–2 chars)</div>
+      <input class="token-input" id="new-token-label" type="text" placeholder="G" maxlength="2">
+    </div>
+    <button id="btn-add-token">+ Place on Map (click cell)</button>
+    <div style="flex-shrink:0;padding:8px 12px 3px;"><div id="token-list-label">Tokens on map</div></div>
+    <div id="token-list-wrap"><div id="token-list"></div></div>
+  </div>
+
+  <!-- FOG PAGE -->
+  <div class="panel-page" id="fog-page">
+    <div class="fog-section">
+      <div class="panel-heading">Fog Tool</div>
+      <div class="fog-tool-buttons">
+        <div class="fog-tool-btn active" data-ftool="reveal">
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7" r="4" stroke="currentColor" stroke-width="1.1"/><line x1="7" y1="1" x2="7" y2="3" stroke="currentColor" stroke-width="1.1"/><line x1="7" y1="11" x2="7" y2="13" stroke="currentColor" stroke-width="1.1"/><line x1="1" y1="7" x2="3" y2="7" stroke="currentColor" stroke-width="1.1"/><line x1="11" y1="7" x2="13" y2="7" stroke="currentColor" stroke-width="1.1"/></svg>
+          Reveal
+        </div>
+        <div class="fog-tool-btn" data-ftool="hide">
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><rect x="2" y="2" width="10" height="10" rx="2" fill="currentColor" opacity="0.3"/><rect x="2" y="2" width="10" height="10" rx="2" stroke="currentColor" stroke-width="1.1"/><line x1="4" y1="4" x2="10" y2="10" stroke="currentColor" stroke-width="1"/><line x1="10" y1="4" x2="4" y2="10" stroke="currentColor" stroke-width="1"/></svg>
+          Hide
+        </div>
+      </div>
+    </div>
+    <div class="fog-brush-row">
+      <label>Brush</label>
+      <input type="range" id="fog-brush-size" min="1" max="5" value="2">
+      <span id="fog-brush-val">2</span>
+    </div>
+    <button class="fog-action-btn" id="btn-fog-reveal-all">Reveal Entire Map</button>
+    <button class="fog-action-btn danger" id="btn-fog-hide-all">Hide Entire Map</button>
+    <div class="fog-player-view-wrap">
+      <label>Player View</label>
+      <label class="toggle-wrap">
+        <input type="checkbox" id="toggle-player-view">
+        <span class="toggle-track"><span class="toggle-thumb"></span></span>
+      </label>
+    </div>
+    <div class="fog-legend">
+      <div class="fog-legend-row"><div class="fog-legend-dot" style="background:#1a160e;border:1px solid #3d3020;"></div>Fog of War (hidden)</div>
+      <div class="fog-legend-row"><div class="fog-legend-dot" style="background:rgba(0,0,0,0.4);border:1px solid #4a6a8a;"></div>Explored (dim)</div>
+      <div class="fog-legend-row"><div class="fog-legend-dot" style="background:transparent;border:1px solid #6b4f28;"></div>Revealed (visible)</div>
+    </div>
+  </div>
+
+  <!-- FILES PAGE -->
+  <div class="panel-page" id="saveload-page">
+    <div class="saveload-section">
+      <div class="panel-heading">Map Name</div>
+      <div id="map-name-wrap">
+        <input class="map-name-input" id="map-name-input" type="text" value="My Battle Map" maxlength="60">
+      </div>
+    </div>
+    <div class="saveload-section">
+      <div class="panel-heading">Save &amp; Load</div>
+      <button class="saveload-btn" id="btn-save-json">
+        <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><rect x="1" y="1" width="10" height="10" rx="1.5" stroke="currentColor" stroke-width="1.1"/><line x1="6" y1="3.5" x2="6" y2="8.5" stroke="currentColor" stroke-width="1.1"/><polyline points="3.5,6.5 6,9 8.5,6.5" stroke="currentColor" stroke-width="1.1" fill="none"/></svg>
+        Save Map (.json)
+      </button>
+      <button class="saveload-btn" id="btn-load-json">
+        <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><rect x="1" y="1" width="10" height="10" rx="1.5" stroke="currentColor" stroke-width="1.1"/><line x1="6" y1="8.5" x2="6" y2="3.5" stroke="currentColor" stroke-width="1.1"/><polyline points="3.5,5.5 6,3 8.5,5.5" stroke="currentColor" stroke-width="1.1" fill="none"/></svg>
+        Load Map (.json)
+      </button>
+      <input type="file" id="file-input" accept=".json" style="display:none">
+    </div>
+    <div class="saveload-section">
+      <div class="panel-heading">Export</div>
+      <button class="saveload-btn" id="btn-export-png">
+        <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><rect x="1" y="1" width="10" height="10" rx="1.5" stroke="currentColor" stroke-width="1.1"/><path d="M2.5 8.5l2-3 2 2.5 1.5-2 2 2.5" stroke="currentColor" stroke-width="1" fill="none"/><circle cx="8.5" cy="3.5" r="1" stroke="currentColor" stroke-width="1"/></svg>
+        Export PNG (DM view)
+      </button>
+      <button class="saveload-btn" id="btn-export-player-png">
+        <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><rect x="1" y="1" width="10" height="10" rx="1.5" stroke="currentColor" stroke-width="1.1"/><path d="M1 7.5l2.5-3 2 2.5 2-2.5 3 3" stroke="currentColor" stroke-width="1" fill="none"/><rect x="4" y="1" width="4" height="4" rx="0.5" fill="currentColor" opacity="0.4"/></svg>
+        Export PNG (Player view)
+      </button>
+    </div>
+    <div id="save-status"></div>
+  </div>
+
+  <div id="key-hints">
+    <div class="panel-heading">Controls</div>
+    <div class="hint-row"><span class="key">LMB</span> Paint / Place / Move</div>
+    <div class="hint-row"><span class="key">RMB</span> Erase terrain</div>
+    <div class="hint-row"><span class="key">M</span> Toggle measure</div>
+    <div class="hint-row"><span class="key">Del</span> Delete selected token</div>
+    <div class="hint-row"><span class="key">Esc</span> Cancel / deselect</div>
+  </div>
+</div>
+
+<!-- ══ CANVAS ══ -->
+<div id="canvas-wrap">
+  <canvas id="map-canvas"></canvas>
+  <div id="canvas-vignette"></div>
+  <div id="coord-tip"></div>
+  <div id="player-view-banner">👁 Player View — Fog Active</div>
+  <div id="measure-tip"></div>
+</div>
+
+<!-- ══ RIGHT PANEL ══ -->
+<div id="rpanel">
+  <div id="rpanel-tabs">
+    <div class="rpanel-tab active" data-rpage="editor-page">Selected</div>
+    <div class="rpanel-tab" data-rpage="initiative-page">Initiative</div>
+  </div>
+  <div class="rpanel-page active" id="editor-page">
+    <div id="editor-empty">
+      <svg width="32" height="32" viewBox="0 0 32 32" fill="none" opacity="0.4"><circle cx="16" cy="16" r="12" stroke="var(--border-glow)" stroke-width="1.5"/><circle cx="16" cy="16" r="6" stroke="var(--border-glow)" stroke-width="1.5" stroke-dasharray="2 3"/><circle cx="16" cy="16" r="2" fill="var(--border-glow)"/></svg>
+      <p>Select a token<br>on the map<br>to edit it</p>
+    </div>
+    <div id="editor-content">
+      <div id="editor-preview-wrap"><canvas id="editor-preview-canvas" width="56" height="56"></canvas></div>
+      <div class="editor-section"><div class="editor-label">Name</div><input class="editor-input" id="ed-name" type="text" placeholder="Token name…" maxlength="30"></div>
+      <div class="editor-section"><div class="editor-label">Label</div><input class="editor-input" id="ed-label" type="text" placeholder="G" maxlength="2" style="width:56px"></div>
+      <div class="editor-section">
+        <div class="editor-label">HP</div>
+        <div id="hp-row"><input class="editor-input" id="hp-current" type="number" min="0" placeholder="—"><span id="hp-sep">/</span><input class="editor-input" id="hp-max" type="number" min="0" placeholder="—"></div>
+        <div class="hp-bar-wrap"><div id="hp-bar-fill"></div></div>
+      </div>
+      <div class="editor-section"><div class="editor-label">Initiative</div><input class="editor-input" id="ed-initiative" type="number" placeholder="Roll…" style="width:70px"></div>
+      <div class="editor-section"><div class="editor-label">Color</div><div class="editor-color-row" id="editor-color-row"></div></div>
+      <div class="editor-section"><div class="editor-label">Size</div><div style="display:flex;gap:5px;" id="editor-size-row"><div class="size-btn active" data-size="1">1×1</div><div class="size-btn" data-size="2">2×2</div><div class="size-btn" data-size="3">3×3</div></div></div>
+      <div class="editor-section"><div class="editor-label">Conditions</div><div id="conditions-wrap"></div></div>
+      <button id="btn-delete-token">✕ Remove Token</button>
+    </div>
+  </div>
+  <div class="rpanel-page" id="initiative-page">
+    <div id="initiative-controls">
+      <button id="btn-roll-all">Roll All</button>
+      <button id="btn-next-turn">Next Turn →</button>
+      <span id="turn-counter">Round 1</span>
+    </div>
+    <div id="initiative-list"></div>
+  </div>
+</div>
+
+</div><!-- #app -->
+
+<!-- ══ MULTIPLAYER DIALOG ══ -->
+<div id="mp-dialog">
+  <div class="mp-box">
+    <div class="mp-box-title">⚔ Live Session</div>
+    <div class="mp-field">
+      <label>Server URL</label>
+      <input id="mp-url-input" type="text" value="ws://localhost:8765" placeholder="ws://localhost:8765">
+    </div>
+    <div class="mp-field">
+      <label>Your Name</label>
+      <input id="mp-name-input" type="text" placeholder="Dungeon Master" maxlength="24">
+    </div>
+    <div id="mp-status-msg"></div>
+    <div id="mp-user-list" style="display:none"></div>
+    <div class="mp-btn-row" id="mp-btn-row-connect">
+      <button class="mp-btn primary" id="mp-do-connect">Connect</button>
+      <button class="mp-btn secondary" id="mp-do-cancel">Close</button>
+    </div>
+    <div class="mp-btn-row" id="mp-btn-row-disconnect" style="display:none">
+      <button class="mp-btn danger" id="mp-do-disconnect">Disconnect</button>
+      <button class="mp-btn secondary" id="mp-do-cancel2">Close</button>
+    </div>
+  </div>
+</div>
+
+<script>
+"use strict";
+// ================================================================
+//  DUNGEON CARTOGRAPHER — Phase 4
+//  New in this phase:
+//    • FogLayer — Set<"col,row"> of revealed cells; brush paint/hide
+//    • Player View mode — renders fog, hides unrevealed terrain/tokens
+//    • Measurement tool — click-drag ruler with ft readout
+//    • Save/Load JSON — full map serialization (terrain+tokens+fog)
+//    • Export PNG — DM view and player view, full map canvas snapshot
+//    • Map naming
+//    • All Phases 1-3 preserved
+// ================================================================
+
+const CELL_PX=64, ZOOM_MIN=0.12, ZOOM_MAX=6.0, ZOOM_SPEED=0.0012, ZOOM_KEY_STEP=0.15;
+const DEFAULT_COLS=30, DEFAULT_ROWS=20, UNDO_LIMIT=80;
+
+const TOKEN_COLORS=[
+  {name:'Red',hex:'#e03030'},{name:'Blue',hex:'#2060d0'},{name:'Green',hex:'#28a028'},
+  {name:'Purple',hex:'#8030b0'},{name:'Orange',hex:'#d06010'},{name:'Teal',hex:'#1a9090'},
+  {name:'Pink',hex:'#c03080'},{name:'Yellow',hex:'#c0a010'},{name:'White',hex:'#c8c0b0'},{name:'Black',hex:'#303030'},
+];
+const TOKEN_TYPE_DEFAULTS={player:{color:'#2060d0'},enemy:{color:'#e03030'},npc:{color:'#28a028'},marker:{color:'#c0a010'}};
+const CONDITIONS=['Prone','Stunned','Poisoned','Blinded','Invisible','Frightened','Restrained','Grappled','Exhausted','Dead'];
+
+function seededRng(seed){let s=(seed|0)+1;return function(){s|=0;s=s+0x6D2B79F5|0;let t=Math.imul(s^s>>>15,1|s);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
+
+// ── Terrain ──────────────────────────────────────────────────────
+const TERRAIN=[
+  {id:'grass',name:'Grass',group:'Natural',draw(ctx,x,y,w,h){const r=seededRng(x*17+y*31);ctx.fillStyle='#2d5a1b';ctx.fillRect(x,y,w,h);ctx.fillStyle='#3a7022';for(let i=0;i<8;i++){const tx=x+r()*w,ty=y+r()*h;ctx.fillRect(tx,ty,1+r()*2,3+r()*4);}ctx.fillStyle='#234d14';for(let i=0;i<5;i++){const tx=x+r()*w,ty=y+r()*h;ctx.fillRect(tx,ty,2+r()*2,2+r()*3);}}},
+  {id:'dirt',name:'Dirt',group:'Natural',draw(ctx,x,y,w,h){const r=seededRng(x*13+y*29);ctx.fillStyle='#6b4422';ctx.fillRect(x,y,w,h);ctx.fillStyle='#7d5530';for(let i=0;i<10;i++){const tx=x+r()*w,ty=y+r()*h,sz=2+r()*5;ctx.fillRect(tx,ty,sz,sz*0.6);}ctx.fillStyle='#533618';for(let i=0;i<6;i++){const tx=x+r()*w,ty=y+r()*h;ctx.fillRect(tx,ty,2+r()*4,1+r()*3);}}},
+  {id:'sand',name:'Sand',group:'Natural',draw(ctx,x,y,w,h){const r=seededRng(x*19+y*11);ctx.fillStyle='#c9a84c';ctx.fillRect(x,y,w,h);ctx.fillStyle='#d4b060';for(let i=0;i<12;i++){ctx.beginPath();ctx.arc(x+r()*w,y+r()*h,1+r()*2,0,Math.PI*2);ctx.fill();}ctx.fillStyle='#b8943c';for(let i=0;i<8;i++){ctx.beginPath();ctx.arc(x+r()*w,y+r()*h,r()*2,0,Math.PI*2);ctx.fill();}}},
+  {id:'forest',name:'Forest',group:'Natural',draw(ctx,x,y,w,h){const r=seededRng(x*23+y*7);ctx.fillStyle='#1a3d0e';ctx.fillRect(x,y,w,h);const tc=2+Math.floor(r()*2);for(let i=0;i<tc;i++){const tx=x+6+r()*(w-12),ty=y+6+r()*(h-12),rad=7+r()*8;ctx.fillStyle=`rgba(${30+r()*20|0},${80+r()*30|0},${15+r()*10|0},0.9)`;ctx.beginPath();ctx.arc(tx,ty,rad,0,Math.PI*2);ctx.fill();ctx.fillStyle=`rgba(${10+r()*15|0},${50+r()*25|0},8,0.7)`;ctx.beginPath();ctx.arc(tx-2+r()*4,ty-2+r()*4,rad*0.7,0,Math.PI*2);ctx.fill();}}},
+  {id:'snow',name:'Snow',group:'Natural',draw(ctx,x,y,w,h){const r=seededRng(x*41+y*17);ctx.fillStyle='#dce8f0';ctx.fillRect(x,y,w,h);ctx.fillStyle='#c5d9e8';for(let i=0;i<8;i++){const tx=x+r()*w,ty=y+r()*h;ctx.fillRect(tx,ty,3+r()*8,1+r()*3);}ctx.fillStyle='#eef4f8';for(let i=0;i<6;i++){ctx.beginPath();ctx.arc(x+r()*w,y+r()*h,1+r()*2,0,Math.PI*2);ctx.fill();}}},
+  {id:'stone_floor',name:'Stone Floor',group:'Stone',draw(ctx,x,y,w,h){const r=seededRng(x*7+y*43);ctx.fillStyle='#5a5550';ctx.fillRect(x,y,w,h);const cols=2,rows=2,bw=w/cols,bh=h/rows;for(let bc=0;bc<cols;bc++)for(let br=0;br<rows;br++){const bx=x+bc*bw,by=y+br*bh,sh=0.85+r()*0.2;ctx.fillStyle=`rgba(${(90*sh)|0},${(85*sh)|0},${(80*sh)|0},1)`;ctx.fillRect(bx+1,by+1,bw-2,bh-2);}ctx.strokeStyle='#3a3530';ctx.lineWidth=1;ctx.strokeRect(x+0.5,y+0.5,w-1,h-1);for(let bc=1;bc<cols;bc++){ctx.beginPath();ctx.moveTo(x+bc*bw,y);ctx.lineTo(x+bc*bw,y+h);ctx.stroke();}for(let br=1;br<rows;br++){ctx.beginPath();ctx.moveTo(x,y+br*bh);ctx.lineTo(x+w,y+br*bh);ctx.stroke();}}},
+  {id:'cobblestone',name:'Cobblestone',group:'Stone',draw(ctx,x,y,w,h){const r=seededRng(x*53+y*11);ctx.fillStyle='#4a4540';ctx.fillRect(x,y,w,h);const count=6+Math.floor(r()*4);for(let i=0;i<count;i++){const cx2=x+4+r()*(w-8),cy2=y+4+r()*(h-8),rw=5+r()*8,rh=4+r()*6,sh=0.7+r()*0.4;ctx.fillStyle=`rgba(${(100*sh)|0},${(95*sh)|0},${(88*sh)|0},1)`;ctx.beginPath();ctx.ellipse(cx2,cy2,rw,rh,r()*0.5,0,Math.PI*2);ctx.fill();ctx.strokeStyle='#2e2c28';ctx.lineWidth=0.7;ctx.stroke();}}},
+  {id:'gravel',name:'Gravel',group:'Stone',draw(ctx,x,y,w,h){const r=seededRng(x*31+y*53);ctx.fillStyle='#706860';ctx.fillRect(x,y,w,h);for(let i=0;i<18;i++){const tx=x+r()*w,ty=y+r()*h,sz=1+r()*3,sh=0.6+r()*0.6;ctx.fillStyle=`rgba(${(130*sh)|0},${(120*sh)|0},${(110*sh)|0},1)`;ctx.fillRect(tx,ty,sz,sz);}}},
+  {id:'water',name:'Water',group:'Water',draw(ctx,x,y,w,h){const r=seededRng(x*11+y*37);ctx.fillStyle='#1a4a7a';ctx.fillRect(x,y,w,h);ctx.fillStyle='#1e5a94';for(let i=0;i<5;i++){const wx=x+r()*w,wy=y+r()*h,ww=8+r()*18;ctx.fillRect(wx,wy,ww,2);}ctx.fillStyle='rgba(100,180,240,0.3)';for(let i=0;i<3;i++){ctx.beginPath();ctx.arc(x+r()*w,y+r()*h,3+r()*5,0,Math.PI*2);ctx.fill();}ctx.fillStyle='rgba(150,210,255,0.12)';ctx.fillRect(x,y,w,h*0.3);}},
+  {id:'shallow',name:'Shallow',group:'Water',draw(ctx,x,y,w,h){const r=seededRng(x*37+y*19);ctx.fillStyle='#3a7a9a';ctx.fillRect(x,y,w,h);ctx.fillStyle='rgba(180,230,240,0.25)';for(let i=0;i<4;i++){const wx=x+r()*w,wy=y+r()*h;ctx.fillRect(wx,wy,6+r()*14,2);}ctx.fillStyle='rgba(180,150,80,0.15)';ctx.fillRect(x,y+h*0.6,w,h*0.4);}},
+  {id:'lava',name:'Lava',group:'Special',draw(ctx,x,y,w,h){const r=seededRng(x*61+y*23);ctx.fillStyle='#3a0800';ctx.fillRect(x,y,w,h);const g=ctx.createLinearGradient(x,y,x+w,y+h);g.addColorStop(0,'#cc3300');g.addColorStop(0.5,'#ff6600');g.addColorStop(1,'#cc2200');ctx.fillStyle=g;for(let i=0;i<3;i++){const lx=x+r()*w*0.5,ly=y+r()*h,lw2=8+r()*20,lh2=3+r()*8;ctx.beginPath();ctx.ellipse(lx+lw2/2,ly,lw2/2,lh2/2,r()*0.8,0,Math.PI*2);ctx.fill();}ctx.fillStyle='rgba(255,100,0,0.15)';ctx.fillRect(x,y,w,4);ctx.fillRect(x,y+h-4,w,4);}},
+  {id:'void',name:'Void',group:'Special',draw(ctx,x,y,w,h){const r=seededRng(x*71+y*43);ctx.fillStyle='#080608';ctx.fillRect(x,y,w,h);ctx.fillStyle='rgba(200,180,255,0.6)';for(let i=0;i<6;i++){ctx.beginPath();ctx.arc(x+r()*w,y+r()*h,r()*1.5,0,Math.PI*2);ctx.fill();}const g2=ctx.createRadialGradient(x+w/2,y+h/2,0,x+w/2,y+h/2,w*0.6);g2.addColorStop(0,'rgba(60,0,80,0.4)');g2.addColorStop(1,'rgba(0,0,0,0)');ctx.fillStyle=g2;ctx.fillRect(x,y,w,h);}},
+  {id:'wood_floor',name:'Wood Floor',group:'Wood',draw(ctx,x,y,w,h){const r=seededRng(x*17+y*61);ctx.fillStyle='#6b3d1a';ctx.fillRect(x,y,w,h);const ph=Math.ceil(h/3),colors=['#7a4822','#6b3d1a','#7f5028'];for(let p=0;p<3;p++){ctx.fillStyle=colors[p%colors.length];ctx.fillRect(x,y+p*ph,w,ph-1);ctx.strokeStyle='rgba(0,0,0,0.2)';ctx.lineWidth=0.5;for(let g=0;g<2;g++){const gy=y+p*ph+3+r()*(ph-6);ctx.beginPath();ctx.moveTo(x,gy);ctx.lineTo(x+w,gy+(r()-0.5)*4);ctx.stroke();}}ctx.strokeStyle='#3a1f08';ctx.lineWidth=1;for(let p=1;p<3;p++){ctx.beginPath();ctx.moveTo(x,y+p*ph);ctx.lineTo(x+w,y+p*ph);ctx.stroke();}}},
+];
+const TERRAIN_MAP=new Map(TERRAIN.map(t=>[t.id,t]));
+
+// ── Token model ───────────────────────────────────────────────────
+let tokenIdCounter=1;
+function makeToken(opts){return{id:tokenIdCounter++,type:opts.type||'player',name:opts.name||'',label:opts.label||'',color:opts.color||TOKEN_TYPE_DEFAULTS[opts.type||'player'].color,size:opts.size||1,col:opts.col||0,row:opts.row||0,hpCurrent:opts.hpCurrent!=null?opts.hpCurrent:'',hpMax:opts.hpMax!=null?opts.hpMax:'',initiative:opts.initiative!=null?opts.initiative:'',conditions:new Set(opts.conditions||[])};}
+
+// ── State ─────────────────────────────────────────────────────────
+const state={
+  cam:{x:0,y:0,zoom:1.0}, cols:DEFAULT_COLS, rows:DEFAULT_ROWS,
+  showGrid:true, cellFt:5,
+  terrain:new Map(),   // "col,row" → terrainId
+  tokens:new Map(),    // id → Token
+  fog:new Set(),       // "col,row" of REVEALED cells (everything else is hidden)
+  fogEnabled:true,     // fog layer is drawn
+  playerView:false,    // player view mode (hides unrevealed)
+  activeTool:'paint', activeTerrainId:TERRAIN[0].id,
+  activeFogTool:'reveal', fogBrushSize:2,
+  isPainting:false, isErasing:false, isPanning:false, spaceDown:false,
+  isFogPainting:false,
+  panStart:{mx:0,my:0,cx:0,cy:0},
+  cursorWorld:{x:0,y:0}, cursorCell:{col:-1,row:-1},
+  undoStack:[], redoStack:[],
+  selectedTokenId:null, draggingTokenId:null, dragOffset:{x:0,y:0},
+  placingToken:false, newTokenConfig:null, hoveredTokenId:null,
+  initiativeOrder:[], currentTurnIdx:0, round:1,
+  // Measurement
+  measuring:false, measureStart:null, measureEnd:null,
+  mapName:'My Battle Map',
+};
+
+// ── DOM ───────────────────────────────────────────────────────────
+const canvasWrap=document.getElementById('canvas-wrap');
+const canvas=document.getElementById('map-canvas');
+const ctx=canvas.getContext('2d');
+const coordTip=document.getElementById('coord-tip');
+const zoomDisplay=document.getElementById('zoom-display');
+const infoZoom=document.getElementById('info-zoom');
+const infoCell=document.getElementById('info-cell');
+const infoTerrain=document.getElementById('info-terrain');
+const infoPainted=document.getElementById('info-painted');
+const infoTokens=document.getElementById('info-tokens');
+const infoCamX=document.getElementById('info-cam-x');
+const infoCamY=document.getElementById('info-cam-y');
+const infoMapsize=document.getElementById('info-mapsize');
+const toggleGrid=document.getElementById('toggle-grid');
+const gridSizeIn=document.getElementById('grid-size-input');
+const btnUndo=document.getElementById('btn-undo');
+const btnRedo=document.getElementById('btn-redo');
+const measureTip=document.getElementById('measure-tip');
+const playerViewBanner=document.getElementById('player-view-banner');
+
+// ── Resize ────────────────────────────────────────────────────────
+function resizeCanvas(){const r=canvasWrap.getBoundingClientRect();canvas.width=r.width;canvas.height=r.height;draw();}
+new ResizeObserver(resizeCanvas).observe(canvasWrap);
+
+// ── Coords ────────────────────────────────────────────────────────
+function screenToWorld(sx,sy){return{x:state.cam.x+sx/state.cam.zoom,y:state.cam.y+sy/state.cam.zoom};}
+function worldToScreen(wx,wy){return{x:(wx-state.cam.x)*state.cam.zoom,y:(wy-state.cam.y)*state.cam.zoom};}
+function worldToCell(wx,wy){return{col:Math.floor(wx/CELL_PX),row:Math.floor(wy/CELL_PX)};}
+function cellKey(c,r){return`${c},${r}`;}
+function inBounds(c,r){return c>=0&&c<state.cols&&r>=0&&r<state.rows;}
+
+// ── Camera ────────────────────────────────────────────────────────
+function zoomAround(nz,sx,sy){const c=Math.min(ZOOM_MAX,Math.max(ZOOM_MIN,nz));const wx=state.cam.x+sx/state.cam.zoom,wy=state.cam.y+sy/state.cam.zoom;state.cam.zoom=c;state.cam.x=wx-sx/c;state.cam.y=wy-sy/c;}
+function resetView(){const mw=state.cols*CELL_PX,mh=state.rows*CELL_PX;const fz=Math.min(canvas.width*0.85/mw,canvas.height*0.85/mh,1.0);state.cam.zoom=fz;state.cam.x=mw/2-canvas.width/2/fz;state.cam.y=mh/2-canvas.height/2/fz;}
+
+// ── Undo/redo ─────────────────────────────────────────────────────
+function pushUndo(snap){state.undoStack.push(snap);if(state.undoStack.length>UNDO_LIMIT)state.undoStack.shift();state.redoStack=[];updateUndoButtons();}
+function undo(){if(!state.undoStack.length)return;const snap=state.undoStack.pop();const rs=new Map();for(const[k,v]of snap){rs.set(k,state.terrain.get(k)??null);if(v===null)state.terrain.delete(k);else state.terrain.set(k,v);}state.redoStack.push(rs);updateUndoButtons();draw();}
+function redo(){if(!state.redoStack.length)return;const snap=state.redoStack.pop();const us=new Map();for(const[k,v]of snap){us.set(k,state.terrain.get(k)??null);if(v===null)state.terrain.delete(k);else state.terrain.set(k,v);}state.undoStack.push(us);updateUndoButtons();draw();}
+function updateUndoButtons(){btnUndo.disabled=!state.undoStack.length;btnRedo.disabled=!state.redoStack.length;}
+
+// ── Terrain ops ───────────────────────────────────────────────────
+function paintCell(col,row,tid,snap){if(!inBounds(col,row))return;const k=cellKey(col,row);if(state.terrain.get(k)===tid)return;if(!snap.has(k))snap.set(k,state.terrain.get(k)??null);if(tid===null)state.terrain.delete(k);else state.terrain.set(k,tid);}
+function floodFill(sc,sr,fid){if(!inBounds(sc,sr))return;const tid=state.terrain.get(cellKey(sc,sr))??null;if(tid===fid)return;const snap=new Map(),q=[[sc,sr]],vis=new Set([cellKey(sc,sr)]);while(q.length){const[c,r]=q.shift();paintCell(c,r,fid,snap);for(const[nc,nr]of[[c+1,r],[c-1,r],[c,r+1],[c,r-1]]){const nk=cellKey(nc,nr);if(!inBounds(nc,nr)||vis.has(nk)||(state.terrain.get(nk)??null)!==tid)continue;vis.add(nk);q.push([nc,nr]);}}if(snap.size){pushUndo(snap);if(!applyingRemote){const changes=[];for(const k of snap.keys())changes.push([k,state.terrain.get(k)??null]);wsSend({type:'terrain_fill',changes});}}}
+
+// ── Fog ops ───────────────────────────────────────────────────────
+function fogPaintBrush(col,row,reveal){const bs=state.fogBrushSize;for(let dc=-(bs-1);dc<bs;dc++)for(let dr=-(bs-1);dr<bs;dr++){const c=col+dc,r=row+dr;if(!inBounds(c,r))continue;if(reveal)state.fog.add(cellKey(c,r));else state.fog.delete(cellKey(c,r));}}
+function fogPaintBrushTracked(col,row,reveal){
+  const bs=state.fogBrushSize;
+  for(let dc=-(bs-1);dc<bs;dc++)for(let dr=-(bs-1);dr<bs;dr++){
+    const c=col+dc,r=row+dr;if(!inBounds(c,r))continue;
+    const k=cellKey(c,r);
+    if(reveal){state.fog.add(k);fogStroke.revealed.push(k);}
+    else{state.fog.delete(k);fogStroke.hidden.push(k);}
+  }
+}
+function fogRevealAll(){for(let c=0;c<state.cols;c++)for(let r=0;r<state.rows;r++)state.fog.add(cellKey(c,r));}
+function fogHideAll(){state.fog.clear();}
+
+// ── Token ops ─────────────────────────────────────────────────────
+function addToken(tok){
+  state.tokens.set(tok.id,tok);
+  refreshTokenList();refreshInitiativeList();updateUI();
+  if(!applyingRemote)wsSend({type:'token_add',token:{...tok,conditions:[...tok.conditions]}});
+}
+function removeToken(id){
+  state.tokens.delete(id);
+  if(state.selectedTokenId===id){state.selectedTokenId=null;updateEditorPanel();}
+  refreshTokenList();refreshInitiativeList();updateUI();draw();
+  if(!applyingRemote)wsSend({type:'token_remove',id});
+}
+function selectToken(id){state.selectedTokenId=id;updateEditorPanel();refreshTokenList();setRpanelTab('editor-page');}
+function deselectToken(){state.selectedTokenId=null;updateEditorPanel();refreshTokenList();}
+function tokenAtWorld(wx,wy){const ids=[...state.tokens.keys()].reverse();for(const id of ids){const t=state.tokens.get(id);const tx=t.col*CELL_PX,ty=t.row*CELL_PX,tw=t.size*CELL_PX,th=t.size*CELL_PX;if(wx>=tx&&wx<=tx+tw&&wy>=ty&&wy<=ty+th)return id;}return null;}
+
+// ── Color utils ───────────────────────────────────────────────────
+function darken(hex,amt){const n=parseInt(hex.slice(1),16);const r=Math.max(0,((n>>16)&0xff)*amt|0),g=Math.max(0,((n>>8)&0xff)*amt|0),b=Math.max(0,(n&0xff)*amt|0);return`rgb(${r},${g},${b})`;}
+function hpColor(pct){if(pct>0.5)return`rgb(${(1-pct)*2*220|0},200,40)`;return`rgb(220,${pct*2*200|0},20)`;}
+
+// ── Token renderer ────────────────────────────────────────────────
+function drawToken(c,tok,highlight){const{x:sx,y:sy}=worldToScreen(tok.col*CELL_PX,tok.row*CELL_PX);const cs=tok.size*CELL_PX*state.cam.zoom,cx2=sx+cs/2,cy2=sy+cs/2,radius=cs*0.38;
+  c.save();c.shadowColor='rgba(0,0,0,0.6)';c.shadowBlur=6;
+  c.beginPath();c.arc(cx2,cy2,radius+3,0,Math.PI*2);c.fillStyle=darken(tok.color,0.5);c.fill();c.shadowBlur=0;
+  c.beginPath();c.arc(cx2,cy2,radius,0,Math.PI*2);c.fillStyle=tok.color;c.fill();
+  c.beginPath();c.arc(cx2-radius*0.2,cy2-radius*0.25,radius*0.45,0,Math.PI*2);c.fillStyle='rgba(255,255,255,0.18)';c.fill();
+  if(highlight==='selected'){c.beginPath();c.arc(cx2,cy2,radius+5,0,Math.PI*2);c.strokeStyle='#d4a843';c.lineWidth=2.5;c.stroke();}
+  else if(highlight==='hover'){c.beginPath();c.arc(cx2,cy2,radius+4,0,Math.PI*2);c.strokeStyle='rgba(212,168,67,0.6)';c.lineWidth=1.5;c.stroke();}
+  const lbl=tok.label||(tok.name?tok.name[0]:'?');
+  const fontSize=Math.max(8,Math.min(radius*0.9,28));
+  c.font=`bold ${fontSize}px 'Cinzel',serif`;c.textAlign='center';c.textBaseline='middle';
+  c.fillStyle='rgba(0,0,0,0.5)';c.fillText(lbl,cx2+1,cy2+1);c.fillStyle='#ffffff';c.fillText(lbl,cx2,cy2);
+  if(tok.conditions.has('Dead')){c.beginPath();c.arc(cx2,cy2,radius+3,0,Math.PI*2);c.strokeStyle='rgba(80,0,0,0.8)';c.lineWidth=3;c.stroke();}
+  if(tok.hpMax&&Number(tok.hpMax)>0){const pct=Math.max(0,Math.min(1,Number(tok.hpCurrent)/Number(tok.hpMax)));const bw=cs*0.75,bh=Math.max(3,cs*0.06),bx=sx+(cs-bw)/2,by=sy+cs*0.88;c.fillStyle='rgba(0,0,0,0.5)';c.fillRect(bx,by,bw,bh);c.fillStyle=hpColor(pct);c.fillRect(bx,by,bw*pct,bh);c.strokeStyle='rgba(255,255,255,0.2)';c.lineWidth=0.5;c.strokeRect(bx,by,bw,bh);}
+  const conds=[...tok.conditions].filter(x=>x!=='Dead');if(conds.length){const dotR=Math.max(2.5,cs*0.055),spacing=dotR*2.5,total=Math.min(conds.length,4),startX=cx2-(total-1)*spacing/2;for(let i=0;i<total;i++){c.beginPath();c.arc(startX+i*spacing,sy+cs*0.08+dotR,dotR,0,Math.PI*2);c.fillStyle='#c0541a';c.fill();}}
+  c.restore();}
+
+// ── Tile cache ────────────────────────────────────────────────────
+const tileCache=new Map();
+async function buildTileCache(){for(const t of TERRAIN){const oc=new OffscreenCanvas(CELL_PX,CELL_PX);t.draw(oc.getContext('2d'),0,0,CELL_PX,CELL_PX);tileCache.set(t.id,await createImageBitmap(oc));}}
+
+// ── Master render ─────────────────────────────────────────────────
+function draw(){
+  const W=canvas.width,H=canvas.height;
+  ctx.fillStyle='#0d0b08';ctx.fillRect(0,0,W,H);
+  drawMapBackground(ctx);
+  drawTerrainLayer(ctx);
+  if(state.showGrid)drawGrid(ctx);
+  drawHoverHighlight(ctx);
+  drawTokenLayer(ctx);
+  drawFogLayer(ctx);
+  drawMeasureLine(ctx);
+  drawFogBrushCursor(ctx);
+  drawRemoteCursors(ctx);
+  drawMapBorder(ctx);
+  updateUI();
+}
+
+function drawMapBackground(c){
+  const mw=state.cols*CELL_PX,mh=state.rows*CELL_PX;
+  const{x:sx,y:sy}=worldToScreen(0,0);
+  c.fillStyle='#1a160e';c.fillRect(sx,sy,mw*state.cam.zoom,mh*state.cam.zoom);
+  const r=seededRng(42);c.globalAlpha=0.04;c.fillStyle='#8a7050';
+  const dc=Math.min(state.cols*state.rows*0.04|0,800);
+  for(let i=0;i<dc;i++){const s=worldToScreen(r()*mw,r()*mh);c.fillRect(s.x,s.y,2,2);}
+  c.globalAlpha=1;
+}
+
+function drawTerrainLayer(c){
+  if(!tileCache.size)return;
+  const cs=CELL_PX*state.cam.zoom;
+  const tl=screenToWorld(0,0),br=screenToWorld(canvas.width,canvas.height);
+  const sc=Math.max(0,Math.floor(tl.x/CELL_PX)),sr=Math.max(0,Math.floor(tl.y/CELL_PX));
+  const ec=Math.min(state.cols-1,Math.ceil(br.x/CELL_PX)),er=Math.min(state.rows-1,Math.ceil(br.y/CELL_PX));
+  for(let col=sc;col<=ec;col++)for(let row=sr;row<=er;row++){
+    if(state.playerView&&!state.fog.has(cellKey(col,row)))continue;
+    const tid=state.terrain.get(cellKey(col,row));if(!tid)continue;
+    const bmp=tileCache.get(tid);if(!bmp)continue;
+    const{x,y}=worldToScreen(col*CELL_PX,row*CELL_PX);
+    c.drawImage(bmp,x,y,cs,cs);
+  }
+}
+
+function drawTokenLayer(c){
+  for(const[id,tok]of state.tokens){
+    // In player view, hide tokens in fogged cells
+    if(state.playerView&&!tok.conditions.has('Invisible')){
+      const tokenFogKey=cellKey(tok.col,tok.row);
+      if(!state.fog.has(tokenFogKey))continue;
+    }
+    const hl=id===state.selectedTokenId?'selected':(id===state.hoveredTokenId?'hover':null);
+    drawToken(c,tok,hl);
+  }
+  // Ghost while dragging
+  if(state.draggingTokenId){const tok=state.tokens.get(state.draggingTokenId);if(tok){const{col,row}=state.cursorCell;if(inBounds(col,row)){c.globalAlpha=0.45;drawToken(c,{...tok,col,row},null);c.globalAlpha=1;}}}
+  // Placement ghost
+  if(state.placingToken&&state.newTokenConfig){const{col,row}=state.cursorCell;if(inBounds(col,row)){c.globalAlpha=0.5;drawToken(c,makeToken({...state.newTokenConfig,col,row,id:-1}),null);c.globalAlpha=1;}}
+}
+
+// ── Fog layer ─────────────────────────────────────────────────────
+function drawFogLayer(c){
+  if(!state.fogEnabled)return;
+  const tl=screenToWorld(0,0),br=screenToWorld(canvas.width,canvas.height);
+  const sc=Math.max(0,Math.floor(tl.x/CELL_PX)),sr=Math.max(0,Math.floor(tl.y/CELL_PX));
+  const ec=Math.min(state.cols-1,Math.ceil(br.x/CELL_PX)),er=Math.min(state.rows-1,Math.ceil(br.y/CELL_PX));
+  const cs=CELL_PX*state.cam.zoom;
+  for(let col=sc;col<=ec;col++){
+    for(let row=sr;row<=er;row++){
+      const k=cellKey(col,row);
+      const revealed=state.fog.has(k);
+      if(state.playerView){
+        // Player view: fully black for unrevealed
+        if(!revealed){const{x,y}=worldToScreen(col*CELL_PX,row*CELL_PX);c.fillStyle='#0d0b08';c.fillRect(x,y,cs,cs);}
+        // Revealed cells show normally (no overlay)
+      } else {
+        // DM view: dim overlay on unrevealed, no overlay on revealed
+        if(!revealed){
+          const{x,y}=worldToScreen(col*CELL_PX,row*CELL_PX);
+          c.fillStyle='rgba(13,11,8,0.72)';
+          c.fillRect(x,y,cs,cs);
+          // Subtle blue-grey tint on edges
+          c.strokeStyle='rgba(50,80,120,0.15)';
+          c.lineWidth=0.5;
+          c.strokeRect(x+0.5,y+0.5,cs-1,cs-1);
+        }
+      }
+    }
+  }
+}
+
+function drawFogBrushCursor(c){
+  if(!state.isFogPainting&&document.getElementById('fog-page').classList.contains('active')&&state.activeTool!=='paint'){
+    // only show fog cursor when on fog tab
+  }
+  // Show fog brush preview when on fog tab
+  const onFogTab=document.getElementById('fog-page').classList.contains('active');
+  if(!onFogTab)return;
+  const{col,row}=state.cursorCell;
+  if(!inBounds(col,row))return;
+  const bs=state.fogBrushSize,cs=CELL_PX*state.cam.zoom;
+  const{x:ox,y:oy}=worldToScreen((col-(bs-1))*CELL_PX,(row-(bs-1))*CELL_PX);
+  const bw=(bs*2-1)*cs,bh=(bs*2-1)*cs;
+  c.save();
+  c.strokeStyle=state.activeFogTool==='reveal'?'rgba(100,200,255,0.7)':'rgba(255,80,80,0.7)';
+  c.lineWidth=1.5;c.setLineDash([3,3]);
+  c.strokeRect(ox,oy,bw,bh);
+  c.fillStyle=state.activeFogTool==='reveal'?'rgba(100,200,255,0.06)':'rgba(255,80,80,0.06)';
+  c.fillRect(ox,oy,bw,bh);
+  c.setLineDash([]);c.restore();
+}
+
+// ── Measurement tool ──────────────────────────────────────────────
+function drawMeasureLine(c){
+  if(!state.measuring||!state.measureStart)return;
+  const end=state.measureEnd||state.cursorWorld;
+  const s=worldToScreen(state.measureStart.x,state.measureStart.y);
+  const e=worldToScreen(end.x,end.y);
+  c.save();
+  // Line
+  c.strokeStyle='rgba(212,168,67,0.9)';c.lineWidth=2;c.setLineDash([6,4]);
+  c.beginPath();c.moveTo(s.x,s.y);c.lineTo(e.x,e.y);c.stroke();
+  // Endpoints
+  c.setLineDash([]);c.fillStyle='#d4a843';
+  c.beginPath();c.arc(s.x,s.y,4,0,Math.PI*2);c.fill();
+  c.beginPath();c.arc(e.x,e.y,4,0,Math.PI*2);c.fill();
+  // Distance readout
+  const dx=(end.x-state.measureStart.x)/CELL_PX;
+  const dy=(end.y-state.measureStart.y)/CELL_PX;
+  const cellDist=Math.sqrt(dx*dx+dy*dy);
+  const ftDist=(cellDist*state.cellFt).toFixed(1);
+  const cellsText=cellDist.toFixed(1);
+  measureTip.textContent=`${ftDist} ft  (${cellsText} cells)`;
+  measureTip.classList.add('visible');
+  c.restore();
+}
+
+// ── Grid, hover, border (unchanged from P3) ───────────────────────
+function drawHoverHighlight(c){
+  const{col,row}=state.cursorCell;
+  if(!inBounds(col,row)||state.draggingTokenId||state.placingToken||state.measuring)return;
+  if(state.hoveredTokenId)return;
+  const onFogTab=document.getElementById('fog-page').classList.contains('active');
+  if(onFogTab)return;
+  const{x:sx,y:sy}=worldToScreen(col*CELL_PX,row*CELL_PX);const cs=CELL_PX*state.cam.zoom;
+  c.save();
+  if(state.activeTool==='eraser'||state.isErasing){c.fillStyle='rgba(200,60,30,0.18)';c.strokeStyle='rgba(220,80,40,0.7)';}
+  else{c.fillStyle='rgba(212,168,67,0.09)';c.strokeStyle='rgba(212,168,67,0.45)';}
+  c.fillRect(sx,sy,cs,cs);c.lineWidth=1.5;c.strokeRect(sx+0.75,sy+0.75,cs-1.5,cs-1.5);
+  c.restore();
+}
+function drawGrid(c){
+  const W=canvas.width,H=canvas.height,zoom=state.cam.zoom,cps=CELL_PX*zoom,skipMinor=cps<6;
+  const tl=screenToWorld(0,0),br=screenToWorld(W,H);
+  const sc=Math.max(0,Math.floor(tl.x/CELL_PX)),sr=Math.max(0,Math.floor(tl.y/CELL_PX));
+  const ec=Math.min(state.cols,Math.ceil(br.x/CELL_PX)),er=Math.min(state.rows,Math.ceil(br.y/CELL_PX));
+  c.save();c.lineWidth=1/zoom;
+  if(!skipMinor){c.strokeStyle='rgba(180,140,70,0.18)';c.beginPath();for(let col=sc;col<=ec;col++){if(col%5===0)continue;const sx=worldToScreen(col*CELL_PX,0).x;c.moveTo(sx,worldToScreen(0,sr*CELL_PX).y);c.lineTo(sx,worldToScreen(0,er*CELL_PX).y);}for(let row=sr;row<=er;row++){if(row%5===0)continue;const sy=worldToScreen(0,row*CELL_PX).y;c.moveTo(worldToScreen(sc*CELL_PX,0).x,sy);c.lineTo(worldToScreen(ec*CELL_PX,0).x,sy);}c.stroke();}
+  c.strokeStyle='rgba(180,140,70,0.38)';c.lineWidth=(skipMinor?1:1.5)/zoom;c.beginPath();for(let col=sc;col<=ec;col++){if(col%5!==0)continue;const sx=worldToScreen(col*CELL_PX,0).x;c.moveTo(sx,worldToScreen(0,sr*CELL_PX).y);c.lineTo(sx,worldToScreen(0,er*CELL_PX).y);}for(let row=sr;row<=er;row++){if(row%5!==0)continue;const sy=worldToScreen(0,row*CELL_PX).y;c.moveTo(worldToScreen(sc*CELL_PX,0).x,sy);c.lineTo(worldToScreen(ec*CELL_PX,0).x,sy);}c.stroke();c.restore();
+  if(cps>=40){c.save();c.font=`${Math.max(8,Math.min(11,cps*0.14))}px 'IM Fell English',serif`;c.fillStyle='rgba(180,140,70,0.22)';c.textAlign='left';c.textBaseline='top';for(let col=sc;col<ec;col++)for(let row=sr;row<er;row++){const s=worldToScreen(col*CELL_PX+3,row*CELL_PX+2);c.fillText(`${col},${row}`,s.x,s.y);}c.restore();}
+}
+function drawMapBorder(c){
+  const mw=state.cols*CELL_PX,mh=state.rows*CELL_PX;
+  const{x:sx,y:sy}=worldToScreen(0,0);const sw=mw*state.cam.zoom,sh=mh*state.cam.zoom;
+  c.save();c.shadowColor='rgba(0,0,0,0.8)';c.shadowBlur=20;c.strokeStyle='#6b4f28';c.lineWidth=2;c.strokeRect(sx,sy,sw,sh);
+  c.shadowColor='rgba(212,168,67,0.3)';c.shadowBlur=8;c.strokeStyle='#d4a843';c.lineWidth=1;c.strokeRect(sx+0.5,sy+0.5,sw-1,sh-1);c.restore();
+}
+
+// ── UI ────────────────────────────────────────────────────────────
+function updateUI(){
+  const pct=Math.round(state.cam.zoom*100);
+  zoomDisplay.textContent=`${pct}%`;
+  if(infoZoom)infoZoom.textContent=state.cam.zoom.toFixed(2)+'×';
+  if(infoCamX)infoCamX.textContent=state.cam.x.toFixed(0);
+  if(infoCamY)infoCamY.textContent=state.cam.y.toFixed(0);
+  if(infoMapsize)infoMapsize.textContent=`${state.cols}×${state.rows}`;
+  if(infoPainted)infoPainted.textContent=state.terrain.size;
+  if(infoTokens)infoTokens.textContent=state.tokens.size;
+  const{col,row}=state.cursorCell;
+  if(inBounds(col,row)){
+    const ft=state.cellFt;
+    if(infoCell)infoCell.textContent=`${col},${row}`;
+    const tid=state.terrain.get(cellKey(col,row));
+    if(infoTerrain)infoTerrain.textContent=tid?(TERRAIN_MAP.get(tid)?.name??tid):'Bare';
+    const hovTok=state.hoveredTokenId?state.tokens.get(state.hoveredTokenId):null;
+    coordTip.textContent=hovTok?`${hovTok.name||'Token'} (${col*ft},${row*ft})ft`:`(${col*ft},${row*ft}) ft`;
+  } else {if(infoCell)infoCell.textContent='—';if(infoTerrain)infoTerrain.textContent='—';coordTip.textContent='';}
+  if(!state.measuring)measureTip.classList.remove('visible');
+}
+
+// ── Save / Load ───────────────────────────────────────────────────
+function serializeMap(){
+  const tokArr=[...state.tokens.values()].map(t=>({...t,conditions:[...t.conditions]}));
+  return JSON.stringify({
+    version:4, name:state.mapName, cols:state.cols, rows:state.rows, cellFt:state.cellFt,
+    terrain:[...state.terrain.entries()],
+    fog:[...state.fog],
+    tokens:tokArr,
+    fogEnabled:state.fogEnabled,
+  },null,2);
+}
+function deserializeMap(json){
+  const d=JSON.parse(json);
+  state.mapName=d.name||'Untitled';
+  state.cols=d.cols||DEFAULT_COLS; state.rows=d.rows||DEFAULT_ROWS; state.cellFt=d.cellFt||5;
+  state.terrain=new Map(d.terrain||[]);
+  state.fog=new Set(d.fog||[]);
+  state.fogEnabled=d.fogEnabled!==false;
+  state.tokens=new Map();
+  tokenIdCounter=1;
+  (d.tokens||[]).forEach(t=>{
+    const tok=makeToken(t);
+    tok.id=t.id; // preserve id for initiative
+    if(t.id>=tokenIdCounter)tokenIdCounter=t.id+1;
+    state.tokens.set(tok.id,tok);
+  });
+  state.undoStack=[]; state.redoStack=[];
+  state.selectedTokenId=null;
+  document.getElementById('map-name-input').value=state.mapName;
+  document.getElementById('grid-size-input').value=state.cellFt;
+  updateUndoButtons(); updateEditorPanel(); refreshTokenList(); refreshInitiativeList();
+  resetView(); draw();
+  setSaveStatus(`Loaded: ${state.mapName}`);
+}
+function setSaveStatus(msg){const el=document.getElementById('save-status');el.textContent=msg;setTimeout(()=>{el.textContent='';},3000);}
+
+document.getElementById('btn-save-json').addEventListener('click',()=>{
+  const json=serializeMap();
+  const blob=new Blob([json],{type:'application/json'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');a.href=url;a.download=`${state.mapName.replace(/[^a-z0-9]/gi,'_')}.json`;a.click();
+  URL.revokeObjectURL(url);
+  setSaveStatus('Saved!');
+});
+document.getElementById('btn-load-json').addEventListener('click',()=>{document.getElementById('file-input').click();});
+document.getElementById('file-input').addEventListener('change',(e)=>{
+  const file=e.target.files[0];if(!file)return;
+  const reader=new FileReader();
+  reader.onload=(ev)=>{try{deserializeMap(ev.target.result);if(!applyingRemote)wsSend({type:'full_state',state:JSON.parse(serializeMap())});}catch(err){alert('Could not load map: '+err.message);}};
+  reader.readAsText(file);
+  e.target.value='';
+});
+document.getElementById('map-name-input').addEventListener('input',e=>{state.mapName=e.target.value;});
+
+// ── PNG Export ────────────────────────────────────────────────────
+function exportPNG(playerViewMode){
+  // Render entire map to an offscreen canvas at 1:1 world scale
+  const mw=state.cols*CELL_PX, mh=state.rows*CELL_PX;
+  const expCanvas=document.createElement('canvas');
+  expCanvas.width=mw; expCanvas.height=mh;
+  const ec=expCanvas.getContext('2d');
+
+  // Temporarily set camera to render full map
+  const savedCam={...state.cam};
+  const savedPlayerView=state.playerView;
+  state.cam={x:0,y:0,zoom:1.0};
+  if(playerViewMode)state.playerView=true;
+
+  // Override worldToScreen for export context
+  // We'll draw directly in world-space (zoom=1, offset=0)
+  ec.fillStyle='#1a160e';ec.fillRect(0,0,mw,mh);
+
+  // Terrain
+  for(let c=0;c<state.cols;c++)for(let r=0;r<state.rows;r++){
+    if(playerViewMode&&!state.fog.has(cellKey(c,r)))continue;
+    const tid=state.terrain.get(cellKey(c,r));if(!tid)continue;
+    const bmp=tileCache.get(tid);if(!bmp)continue;
+    ec.drawImage(bmp,c*CELL_PX,r*CELL_PX,CELL_PX,CELL_PX);
+  }
+
+  // Grid
+  if(state.showGrid){
+    ec.strokeStyle='rgba(180,140,70,0.18)';ec.lineWidth=0.5;ec.beginPath();
+    for(let c=0;c<=state.cols;c++){ec.moveTo(c*CELL_PX,0);ec.lineTo(c*CELL_PX,mh);}
+    for(let r=0;r<=state.rows;r++){ec.moveTo(0,r*CELL_PX);ec.lineTo(mw,r*CELL_PX);}
+    ec.stroke();
+    ec.strokeStyle='rgba(180,140,70,0.38)';ec.lineWidth=1;ec.beginPath();
+    for(let c=0;c<=state.cols;c+=5){ec.moveTo(c*CELL_PX,0);ec.lineTo(c*CELL_PX,mh);}
+    for(let r=0;r<=state.rows;r+=5){ec.moveTo(0,r*CELL_PX);ec.lineTo(mw,r*CELL_PX);}
+    ec.stroke();
+  }
+
+  // Tokens (use worldToScreen override via direct coords since zoom=1, offset=0)
+  for(const[id,tok]of state.tokens){
+    if(playerViewMode&&!state.fog.has(cellKey(tok.col,tok.row)))continue;
+    // Temporary cam override so drawToken works
+    drawTokenExport(ec,tok);
+  }
+
+  // Fog
+  for(let c=0;c<state.cols;c++)for(let r=0;r<state.rows;r++){
+    const k=cellKey(c,r),revealed=state.fog.has(k);
+    if(playerViewMode){if(!revealed){ec.fillStyle='#0d0b08';ec.fillRect(c*CELL_PX,r*CELL_PX,CELL_PX,CELL_PX);}}
+    else{if(!revealed){ec.fillStyle='rgba(13,11,8,0.72)';ec.fillRect(c*CELL_PX,r*CELL_PX,CELL_PX,CELL_PX);}}
+  }
+
+  // Border
+  ec.strokeStyle='#d4a843';ec.lineWidth=2;ec.strokeRect(1,1,mw-2,mh-2);
+
+  // Restore state
+  state.cam=savedCam;
+  state.playerView=savedPlayerView;
+
+  const url=expCanvas.toDataURL('image/png');
+  const a=document.createElement('a');a.href=url;
+  a.download=`${state.mapName.replace(/[^a-z0-9]/gi,'_')}${playerViewMode?'_player':''}.png`;
+  a.click();
+  setSaveStatus('Exported PNG!');
+}
+
+function drawTokenExport(ec,tok){
+  const tx=tok.col*CELL_PX,ty=tok.row*CELL_PX,ts=tok.size*CELL_PX;
+  const cx2=tx+ts/2,cy2=ty+ts/2,radius=ts*0.38;
+  ec.save();
+  ec.beginPath();ec.arc(cx2,cy2,radius+3,0,Math.PI*2);ec.fillStyle=darken(tok.color,0.5);ec.fill();
+  ec.beginPath();ec.arc(cx2,cy2,radius,0,Math.PI*2);ec.fillStyle=tok.color;ec.fill();
+  const lbl=tok.label||(tok.name?tok.name[0]:'?');
+  ec.font=`bold ${Math.max(8,radius*0.9)}px 'Cinzel',serif`;ec.textAlign='center';ec.textBaseline='middle';
+  ec.fillStyle='rgba(0,0,0,0.4)';ec.fillText(lbl,cx2+1,cy2+1);ec.fillStyle='#fff';ec.fillText(lbl,cx2,cy2);
+  if(tok.hpMax&&Number(tok.hpMax)>0){const pct=Math.max(0,Math.min(1,Number(tok.hpCurrent)/Number(tok.hpMax)));const bw=ts*0.75,bh=4,bx=tx+(ts-bw)/2,by=ty+ts*0.88;ec.fillStyle='rgba(0,0,0,0.5)';ec.fillRect(bx,by,bw,bh);ec.fillStyle=hpColor(pct);ec.fillRect(bx,by,bw*pct,bh);}
+  ec.restore();
+}
+
+document.getElementById('btn-export-png').addEventListener('click',()=>exportPNG(false));
+document.getElementById('btn-export-player-png').addEventListener('click',()=>exportPNG(true));
+
+// ── Panel tabs ────────────────────────────────────────────────────
+function switchPanelTab(pageId){
+  document.querySelectorAll('.panel-page').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.panel-tab').forEach(t=>t.classList.remove('active'));
+  document.getElementById(pageId).classList.add('active');
+  document.querySelector(`.panel-tab[data-page="${pageId}"]`)?.classList.add('active');
+  draw();
+}
+document.querySelectorAll('.panel-tab').forEach(t=>t.addEventListener('click',()=>switchPanelTab(t.dataset.page)));
+function setRpanelTab(pageId){
+  document.querySelectorAll('.rpanel-page').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.rpanel-tab').forEach(t=>t.classList.remove('active'));
+  document.getElementById(pageId).classList.add('active');
+  document.querySelector(`.rpanel-tab[data-rpage="${pageId}"]`)?.classList.add('active');
+}
+document.querySelectorAll('.rpanel-tab').forEach(t=>t.addEventListener('click',()=>setRpanelTab(t.dataset.rpage)));
+
+// ── Terrain palette ───────────────────────────────────────────────
+function buildPalette(){
+  const container=document.getElementById('terrain-palette');container.innerHTML='';
+  const groups=[...new Set(TERRAIN.map(t=>t.group))];
+  groups.forEach(group=>{
+    const lbl=document.createElement('div');lbl.className='terrain-group-label';lbl.textContent=group;container.appendChild(lbl);
+    const grid=document.createElement('div');grid.className='terrain-grid';container.appendChild(grid);
+    TERRAIN.filter(t=>t.group===group).forEach(terrain=>{
+      const sw=document.createElement('div');sw.className='terrain-swatch'+(terrain.id===state.activeTerrainId?' selected':'');sw.dataset.id=terrain.id;
+      const prev=document.createElement('div');prev.className='swatch-preview';
+      const pc=document.createElement('canvas');pc.width=32;pc.height=32;terrain.draw(pc.getContext('2d'),0,0,32,32);prev.appendChild(pc);
+      const lbl2=document.createElement('div');lbl2.className='swatch-label';lbl2.textContent=terrain.name;
+      sw.appendChild(prev);sw.appendChild(lbl2);sw.addEventListener('click',()=>selectTerrain(terrain.id));grid.appendChild(sw);
+    });
+  });
+}
+function selectTerrain(id){state.activeTerrainId=id;document.querySelectorAll('.terrain-swatch').forEach(el=>el.classList.toggle('selected',el.dataset.id===id));if(state.activeTool!=='paint')setTool('paint');}
+
+// ── Tool selector ─────────────────────────────────────────────────
+function setTool(tool){state.activeTool=tool;document.querySelectorAll('.tool-btn').forEach(b=>b.classList.toggle('active',b.dataset.tool===tool));canvasWrap.classList.remove('tool-fill','tool-eraser');if(tool==='fill')canvasWrap.classList.add('tool-fill');if(tool==='eraser')canvasWrap.classList.add('tool-eraser');}
+document.querySelectorAll('.tool-btn').forEach(b=>b.addEventListener('click',()=>setTool(b.dataset.tool)));
+
+// ── Fog controls ──────────────────────────────────────────────────
+document.querySelectorAll('.fog-tool-btn').forEach(b=>{
+  b.addEventListener('click',()=>{
+    state.activeFogTool=b.dataset.ftool;
+    document.querySelectorAll('.fog-tool-btn').forEach(x=>x.classList.remove('active'));
+    b.classList.add('active');
+  });
+});
+document.getElementById('fog-brush-size').addEventListener('input',e=>{
+  state.fogBrushSize=Number(e.target.value);
+  document.getElementById('fog-brush-val').textContent=state.fogBrushSize;
+  draw();
+});
+document.getElementById('btn-fog-reveal-all').addEventListener('click',()=>{fogRevealAll();draw();if(!applyingRemote)wsSend({type:'fog_reveal_all'});});
+document.getElementById('btn-fog-hide-all').addEventListener('click',()=>{if(confirm('Hide the entire map?')){fogHideAll();draw();if(!applyingRemote)wsSend({type:'fog_hide_all'});}});
+document.getElementById('toggle-player-view').addEventListener('change',e=>{
+  state.playerView=e.target.checked;
+  playerViewBanner.classList.toggle('visible',state.playerView);
+  draw();
+});
+
+// ── Measure tool ──────────────────────────────────────────────────
+function toggleMeasure(){
+  state.measuring=!state.measuring;
+  state.measureStart=null;state.measureEnd=null;
+  document.getElementById('btn-measure').classList.toggle('active-mode',state.measuring);
+  if(!state.measuring)measureTip.classList.remove('visible');
+  canvasWrap.classList.toggle('measuring',state.measuring);
+  draw();
+}
+document.getElementById('btn-measure').addEventListener('click',toggleMeasure);
+
+// ── Token new-type buttons ────────────────────────────────────────
+let newTokenType='player',newTokenColor=TOKEN_TYPE_DEFAULTS['player'].color,newTokenSize=1;
+document.querySelectorAll('.token-type-btn').forEach(b=>{
+  b.addEventListener('click',()=>{newTokenType=b.dataset.ttype;newTokenColor=TOKEN_TYPE_DEFAULTS[newTokenType].color;document.querySelectorAll('.token-type-btn').forEach(x=>x.classList.remove('active'));b.classList.add('active');buildColorSwatches();});
+});
+function buildColorSwatches(){
+  const row=document.getElementById('token-color-row');
+  [...row.querySelectorAll('.color-swatch')].forEach(e=>e.remove());
+  TOKEN_COLORS.forEach(c=>{const s=document.createElement('div');s.className='color-swatch'+(c.hex===newTokenColor?' selected':'');s.style.background=c.hex;s.title=c.name;s.addEventListener('click',()=>{newTokenColor=c.hex;buildColorSwatches();});row.appendChild(s);});
+}
+buildColorSwatches();
+document.querySelectorAll('#token-size-row .size-btn').forEach(b=>{b.addEventListener('click',()=>{newTokenSize=Number(b.dataset.size);document.querySelectorAll('#token-size-row .size-btn').forEach(x=>x.classList.remove('active'));b.classList.add('active');});});
+document.getElementById('btn-add-token').addEventListener('click',()=>{
+  const name=document.getElementById('new-token-name').value.trim()||'Token';
+  const label=document.getElementById('new-token-label').value.trim()||(name[0]||'T');
+  state.newTokenConfig={type:newTokenType,name,label,color:newTokenColor,size:newTokenSize};
+  state.placingToken=true;switchPanelTab('token-page');
+  document.getElementById('btn-add-token').textContent='Click map to place…';
+});
+
+// ── Token list ────────────────────────────────────────────────────
+function refreshTokenList(){
+  const list=document.getElementById('token-list');list.innerHTML='';
+  if(!state.tokens.size){const e=document.createElement('div');e.style.cssText='padding:12px;font-family:"IM Fell English",serif;font-style:italic;font-size:11px;color:var(--ink-dim);opacity:0.5;text-align:center;';e.textContent='No tokens placed yet';list.appendChild(e);return;}
+  for(const[id,tok]of state.tokens){const row=document.createElement('div');row.className='token-list-item'+(id===state.selectedTokenId?' selected':'');const dot=document.createElement('div');dot.className='token-list-dot';dot.style.background=tok.color;const name=document.createElement('div');name.className='token-list-name';name.textContent=tok.name||'Unnamed';const type=document.createElement('div');type.className='token-list-type';type.textContent=tok.type;const del=document.createElement('div');del.className='token-list-del';del.textContent='✕';del.addEventListener('click',e=>{e.stopPropagation();removeToken(id);});row.appendChild(dot);row.appendChild(name);row.appendChild(type);row.appendChild(del);row.addEventListener('click',()=>{selectToken(id);draw();});list.appendChild(row);}
+}
+
+// ── Initiative ────────────────────────────────────────────────────
+function sortInitiative(){state.initiativeOrder=[...state.tokens.keys()].sort((a,b)=>(Number(state.tokens.get(b).initiative)||0)-(Number(state.tokens.get(a).initiative)||0));}
+function rollInitiative(tok){tok.initiative=(Math.floor(Math.random()*20)+1)+'';}
+function refreshInitiativeList(){
+  sortInitiative();const list=document.getElementById('initiative-list');list.innerHTML='';
+  if(!state.initiativeOrder.length){const e=document.createElement('div');e.style.cssText='padding:16px 12px;font-family:"IM Fell English",serif;font-style:italic;font-size:11px;color:var(--ink-dim);opacity:0.5;text-align:center;';e.textContent='Add tokens to track initiative';list.appendChild(e);return;}
+  state.initiativeOrder.forEach((id,idx)=>{
+    const tok=state.tokens.get(id);const row=document.createElement('div');row.className='init-row'+(idx===state.currentTurnIdx?' current-turn':'');
+    const score=document.createElement('div');score.className='init-score';const inp=document.createElement('input');inp.type='number';inp.value=tok.initiative||'';inp.placeholder='—';inp.addEventListener('change',()=>{tok.initiative=inp.value;refreshInitiativeList();});score.appendChild(inp);
+    const dot=document.createElement('div');dot.className='init-dot';dot.style.background=tok.color;const name=document.createElement('div');name.className='init-name';name.textContent=tok.name||'Unnamed';const hp=document.createElement('div');hp.className='init-hp';if(tok.hpMax&&Number(tok.hpMax)>0)hp.textContent=`${tok.hpCurrent||0}/${tok.hpMax}`;
+    row.appendChild(score);row.appendChild(dot);row.appendChild(name);row.appendChild(hp);row.addEventListener('click',()=>{selectToken(id);draw();});list.appendChild(row);
+  });
+  document.getElementById('turn-counter').textContent=`Round ${state.round}`;
+}
+document.getElementById('btn-roll-all').addEventListener('click',()=>{
+  for(const tok of state.tokens.values())rollInitiative(tok);
+  state.currentTurnIdx=0;refreshInitiativeList();updateEditorPanel();
+  if(!applyingRemote){
+    const values={};for(const[id,tok]of state.tokens)values[id]=tok.initiative;
+    wsSend({type:'initiative_update',currentTurnIdx:state.currentTurnIdx,round:state.round,values});
+  }
+});
+document.getElementById('btn-next-turn').addEventListener('click',()=>{
+  if(!state.initiativeOrder.length)return;
+  state.currentTurnIdx=(state.currentTurnIdx+1)%state.initiativeOrder.length;
+  if(state.currentTurnIdx===0)state.round++;
+  const id=state.initiativeOrder[state.currentTurnIdx];selectToken(id);draw();refreshInitiativeList();
+  document.querySelectorAll('.init-row')[state.currentTurnIdx]?.scrollIntoView({block:'nearest'});
+  if(!applyingRemote)wsSend({type:'initiative_update',currentTurnIdx:state.currentTurnIdx,round:state.round});
+});
+
+// ── Token editor ──────────────────────────────────────────────────
+function drawEditorPreview(tok){const pc=document.getElementById('editor-preview-canvas');const pctx=pc.getContext('2d');const W=pc.width,H=pc.height;pctx.clearRect(0,0,W,H);const radius=W*0.35,cx2=W/2,cy2=H/2;pctx.beginPath();pctx.arc(cx2,cy2,radius+3,0,Math.PI*2);pctx.fillStyle=darken(tok.color,0.5);pctx.fill();pctx.beginPath();pctx.arc(cx2,cy2,radius,0,Math.PI*2);pctx.fillStyle=tok.color;pctx.fill();pctx.beginPath();pctx.arc(cx2-radius*0.2,cy2-radius*0.25,radius*0.4,0,Math.PI*2);pctx.fillStyle='rgba(255,255,255,0.2)';pctx.fill();const lbl=tok.label||(tok.name?tok.name[0]:'?');pctx.font=`bold ${radius*0.9}px 'Cinzel',serif`;pctx.textAlign='center';pctx.textBaseline='middle';pctx.fillStyle='rgba(0,0,0,0.4)';pctx.fillText(lbl,cx2+1,cy2+1);pctx.fillStyle='#fff';pctx.fillText(lbl,cx2,cy2);}
+function updateEditorPanel(){
+  const tok=state.selectedTokenId?state.tokens.get(state.selectedTokenId):null;
+  const empty=document.getElementById('editor-empty'),content=document.getElementById('editor-content');
+  if(!tok){empty.style.display='';content.classList.remove('visible');return;}
+  empty.style.display='none';content.classList.add('visible');
+  document.getElementById('ed-name').value=tok.name;document.getElementById('ed-label').value=tok.label;
+  document.getElementById('hp-current').value=tok.hpCurrent;document.getElementById('hp-max').value=tok.hpMax;document.getElementById('ed-initiative').value=tok.initiative;
+  const pct=(tok.hpMax&&Number(tok.hpMax)>0)?Math.max(0,Math.min(1,Number(tok.hpCurrent)/Number(tok.hpMax))):0;
+  const fill=document.getElementById('hp-bar-fill');fill.style.width=`${pct*100}%`;fill.style.background=tok.hpMax?hpColor(pct):'#333';
+  const crow=document.getElementById('editor-color-row');crow.innerHTML='';TOKEN_COLORS.forEach(c=>{const s=document.createElement('div');s.className='editor-color-swatch'+(tok.color===c.hex?' selected':'');s.style.background=c.hex;s.title=c.name;s.addEventListener('click',()=>{tok.color=c.hex;updateEditorPanel();draw();if(!applyingRemote)wsSend({type:'token_update',id:tok.id,changes:{color:tok.color}});});crow.appendChild(s);});
+  document.querySelectorAll('#editor-size-row .size-btn').forEach(b=>{b.classList.toggle('active',Number(b.dataset.size)===tok.size);b.onclick=()=>{tok.size=Number(b.dataset.size);updateEditorPanel();draw();if(!applyingRemote)wsSend({type:'token_update',id:tok.id,changes:{size:tok.size}});};});
+  const cw=document.getElementById('conditions-wrap');cw.innerHTML='';CONDITIONS.forEach(c=>{const b=document.createElement('div');b.className='condition-badge'+(tok.conditions.has(c)?' active':'');b.textContent=c;b.addEventListener('click',()=>{if(tok.conditions.has(c))tok.conditions.delete(c);else tok.conditions.add(c);updateEditorPanel();draw();if(!applyingRemote)wsSend({type:'token_update',id:tok.id,changes:{conditions:[...tok.conditions]}});});cw.appendChild(b);});
+  drawEditorPreview(tok);refreshInitiativeList();
+}
+['ed-name','ed-label','hp-current','hp-max','ed-initiative'].forEach(id=>{
+  document.getElementById(id).addEventListener('input',()=>{
+    const tok=state.selectedTokenId?state.tokens.get(state.selectedTokenId):null;if(!tok)return;
+    const changes={};
+    if(id==='ed-name'){tok.name=document.getElementById(id).value;changes.name=tok.name;refreshTokenList();}
+    if(id==='ed-label'){tok.label=document.getElementById(id).value;changes.label=tok.label;}
+    if(id==='hp-current'){tok.hpCurrent=document.getElementById(id).value;changes.hpCurrent=tok.hpCurrent;}
+    if(id==='hp-max'){tok.hpMax=document.getElementById(id).value;changes.hpMax=tok.hpMax;}
+    if(id==='ed-initiative'){tok.initiative=document.getElementById(id).value;changes.initiative=tok.initiative;refreshInitiativeList();}
+    updateEditorPanel();draw();
+    if(!applyingRemote)wsSend({type:'token_update',id:tok.id,changes});
+  });
+});
+document.getElementById('btn-delete-token').addEventListener('click',()=>{if(state.selectedTokenId)removeToken(state.selectedTokenId);});
+
+// ── Canvas input ──────────────────────────────────────────────────
+let strokeUndoSnap=null;
+let fogStroke={revealed:[],hidden:[]};
+const onFogTab=()=>document.getElementById('fog-page').classList.contains('active');
+
+canvasWrap.addEventListener('mousedown',(e)=>{
+  const rect=canvasWrap.getBoundingClientRect();
+  const sx=e.clientX-rect.left,sy=e.clientY-rect.top;
+
+  // Pan
+  if(e.button===1||(e.button===0&&state.spaceDown)){e.preventDefault();state.isPanning=true;state.panStart={mx:e.clientX,my:e.clientY,cx:state.cam.x,cy:state.cam.y};canvasWrap.classList.add('panning');return;}
+
+  const w=screenToWorld(sx,sy);
+  const{col,row}=worldToCell(w.x,w.y);
+
+  // Measurement: left-click to start/end
+  if(state.measuring&&e.button===0){
+    if(!state.measureStart){state.measureStart={x:w.x,y:w.y};state.measureEnd=null;}
+    else{state.measureEnd={x:w.x,y:w.y};}
+    draw();return;
+  }
+
+  // Fog painting
+  if(onFogTab()&&e.button===0&&!state.spaceDown){
+    state.isFogPainting=true;
+    fogStroke={revealed:[],hidden:[]};
+    fogPaintBrushTracked(col,row,state.activeFogTool==='reveal');
+    draw();return;
+  }
+
+  // Right-click = quick erase terrain
+  if(e.button===2){e.preventDefault();const hitTok=tokenAtWorld(w.x,w.y);if(!hitTok&&inBounds(col,row)){state.isErasing=true;strokeUndoSnap=new Map();paintCell(col,row,null,strokeUndoSnap);draw();}return;}
+
+  if(e.button===0){
+    if(state.placingToken&&state.newTokenConfig){if(inBounds(col,row)){const tok=makeToken({...state.newTokenConfig,col,row});addToken(tok);selectToken(tok.id);state.placingToken=false;state.newTokenConfig=null;document.getElementById('btn-add-token').textContent='+ Place on Map (click cell)';draw();}return;}
+    const hitId=tokenAtWorld(w.x,w.y);
+    if(hitId!==null){e.preventDefault();selectToken(hitId);const tok=state.tokens.get(hitId);state.draggingTokenId=hitId;state.dragOffset={x:w.x-tok.col*CELL_PX,y:w.y-tok.row*CELL_PX};canvasWrap.classList.add('dragging-token');draw();return;}
+    if(inBounds(col,row)&&state.selectedTokenId)deselectToken();
+    if(state.activeTool==='fill'){floodFill(col,row,state.activeTerrainId);draw();return;}
+    if(state.activeTool==='eraser'){state.isErasing=true;strokeUndoSnap=new Map();paintCell(col,row,null,strokeUndoSnap);draw();return;}
+    state.isPainting=true;strokeUndoSnap=new Map();paintCell(col,row,state.activeTerrainId,strokeUndoSnap);draw();
+  }
+});
+
+window.addEventListener('mousemove',(e)=>{
+  const rect=canvasWrap.getBoundingClientRect();
+  const sx=e.clientX-rect.left,sy=e.clientY-rect.top;
+  const w=screenToWorld(sx,sy);
+  state.cursorWorld=w;state.cursorCell=worldToCell(w.x,w.y);
+  state.hoveredTokenId=tokenAtWorld(w.x,w.y);
+  // Broadcast cursor position (throttled)
+  const now=Date.now();
+  if(now-cursorThrottle>CURSOR_THROTTLE_MS){
+    cursorThrottle=now;
+    const mpName=document.getElementById('mp-name-input')?.value.trim()||'Player';
+    wsSend({type:'cursor_move',wx:w.x,wy:w.y,clientId:myClientId,name:mpName,color:myColor});
+  }
+  if(state.hoveredTokenId&&!state.draggingTokenId&&!state.placingToken)canvasWrap.style.cursor='pointer';
+  else if(!state.isPanning&&!state.draggingTokenId&&!state.placingToken&&!state.measuring)canvasWrap.style.cursor='';
+  if(state.isPanning){state.cam.x=state.panStart.cx-(e.clientX-state.panStart.mx)/state.cam.zoom;state.cam.y=state.panStart.cy-(e.clientY-state.panStart.my)/state.cam.zoom;draw();return;}
+  if(state.draggingTokenId){const{col,row}=state.cursorCell;const tok=state.tokens.get(state.draggingTokenId);if(tok&&inBounds(col,row)){tok.col=col;tok.row=row;}draw();return;}
+  if(state.isFogPainting){const{col,row}=state.cursorCell;fogPaintBrushTracked(col,row,state.activeFogTool==='reveal');}
+  if(state.isPainting||state.isErasing)paintCell(state.cursorCell.col,state.cursorCell.row,state.isErasing?null:state.activeTerrainId,strokeUndoSnap);
+  draw();
+});
+
+window.addEventListener('mouseup',(e)=>{
+  if(state.isPanning){state.isPanning=false;canvasWrap.classList.remove('panning');}
+  if(state.draggingTokenId){
+    const dtid=state.draggingTokenId;
+    state.draggingTokenId=null;canvasWrap.classList.remove('dragging-token');
+    refreshTokenList();refreshInitiativeList();
+    if(!applyingRemote){const t=state.tokens.get(dtid);if(t)wsSend({type:'token_move',id:dtid,col:t.col,row:t.row});}
+  }
+  if(state.isFogPainting){
+    state.isFogPainting=false;
+    if(!applyingRemote&&(fogStroke.revealed.length||fogStroke.hidden.length)){
+      wsSend({type:'fog_paint',revealed:fogStroke.revealed,hidden:fogStroke.hidden});
+    }
+    fogStroke={revealed:[],hidden:[]};
+  }
+  if(state.isPainting||state.isErasing){
+    if(strokeUndoSnap&&strokeUndoSnap.size>0){
+      pushUndo(strokeUndoSnap);
+      if(!applyingRemote){
+        // Broadcast each painted cell's new value
+        const changes=[];
+        for(const k of strokeUndoSnap.keys())changes.push([k,state.terrain.get(k)??null]);
+        wsSend({type:'terrain_fill',changes});
+      }
+    }
+    strokeUndoSnap=null;state.isPainting=false;state.isErasing=false;
+  }
+  draw();
+});
+
+canvasWrap.addEventListener('contextmenu',e=>e.preventDefault());
+canvasWrap.addEventListener('mouseleave',()=>{state.cursorCell={col:-1,row:-1};state.hoveredTokenId=null;state.isFogPainting=false;draw();wsSend({type:'cursor_leave',clientId:myClientId});});
+canvasWrap.addEventListener('wheel',(e)=>{e.preventDefault();const rect=canvasWrap.getBoundingClientRect();zoomAround(state.cam.zoom*(1+(-e.deltaY*ZOOM_SPEED)),e.clientX-rect.left,e.clientY-rect.top);draw();},{passive:false});
+
+// ── Keyboard ──────────────────────────────────────────────────────
+window.addEventListener('keydown',(e)=>{
+  if(e.target.matches('input,textarea'))return;
+  if(e.code==='Space'){e.preventDefault();state.spaceDown=true;if(!state.isPanning&&!state.hoveredTokenId)canvasWrap.style.cursor='grab';}
+  if(e.code==='Home'){resetView();draw();}
+  if(e.code==='Escape'){
+    if(state.placingToken){state.placingToken=false;state.newTokenConfig=null;document.getElementById('btn-add-token').textContent='+ Place on Map (click cell)';}
+    if(state.measuring){state.measuring=false;state.measureStart=null;state.measureEnd=null;document.getElementById('btn-measure').classList.remove('active-mode');measureTip.classList.remove('visible');canvasWrap.classList.remove('measuring');}
+    deselectToken();draw();
+  }
+  if(e.code==='Equal'||e.code==='NumpadAdd'){zoomAround(state.cam.zoom+ZOOM_KEY_STEP,canvas.width/2,canvas.height/2);draw();}
+  if(e.code==='Minus'||e.code==='NumpadSubtract'){zoomAround(state.cam.zoom-ZOOM_KEY_STEP,canvas.width/2,canvas.height/2);draw();}
+  if(e.code==='Delete'||e.code==='Backspace'){if(state.selectedTokenId)removeToken(state.selectedTokenId);}
+  if(e.key==='p'||e.key==='P')setTool('paint');
+  if(e.key==='f'||e.key==='F')setTool('fill');
+  if(e.key==='e'||e.key==='E')setTool('eraser');
+  if(e.key==='m'||e.key==='M')toggleMeasure();
+  if((e.ctrlKey||e.metaKey)&&e.key==='z'){e.preventDefault();undo();}
+  if((e.ctrlKey||e.metaKey)&&(e.key==='y'||(e.shiftKey&&e.key==='z'))){e.preventDefault();redo();}
+  const num=parseInt(e.key,10);if(num>=1&&num<=TERRAIN.length)selectTerrain(TERRAIN[num-1].id);
+});
+window.addEventListener('keyup',(e)=>{if(e.code==='Space'){state.spaceDown=false;if(!state.isPanning)canvasWrap.style.cursor='';}});
+
+// ── Touch ─────────────────────────────────────────────────────────
+let lastTouchDist=null;
+canvasWrap.addEventListener('touchstart',(e)=>{e.preventDefault();if(e.touches.length===1){const t=e.touches[0];state.isPanning=true;state.panStart={mx:t.clientX,my:t.clientY,cx:state.cam.x,cy:state.cam.y};}if(e.touches.length===2)lastTouchDist=Math.hypot(e.touches[1].clientX-e.touches[0].clientX,e.touches[1].clientY-e.touches[0].clientY);},{passive:false});
+canvasWrap.addEventListener('touchmove',(e)=>{e.preventDefault();const rect=canvasWrap.getBoundingClientRect();if(e.touches.length===1&&state.isPanning){const t=e.touches[0];state.cam.x=state.panStart.cx-(t.clientX-state.panStart.mx)/state.cam.zoom;state.cam.y=state.panStart.cy-(t.clientY-state.panStart.my)/state.cam.zoom;}if(e.touches.length===2&&lastTouchDist!==null){const dist=Math.hypot(e.touches[1].clientX-e.touches[0].clientX,e.touches[1].clientY-e.touches[0].clientY);zoomAround(state.cam.zoom*(dist/lastTouchDist),(e.touches[0].clientX+e.touches[1].clientX)/2-rect.left,(e.touches[0].clientY+e.touches[1].clientY)/2-rect.top);lastTouchDist=dist;}draw();},{passive:false});
+canvasWrap.addEventListener('touchend',(e)=>{if(e.touches.length===0){state.isPanning=false;lastTouchDist=null;}},{passive:false});
+
+// ── Toolbar ───────────────────────────────────────────────────────
+document.getElementById('btn-new').addEventListener('click',()=>{if(confirm('Clear terrain, tokens and fog?')){state.terrain.clear();state.tokens.clear();state.fog.clear();state.selectedTokenId=null;state.undoStack=[];state.redoStack=[];updateUndoButtons();updateEditorPanel();refreshTokenList();refreshInitiativeList();resetView();draw();if(!applyingRemote)wsSend({type:'map_clear'});}});
+document.getElementById('btn-reset-view').addEventListener('click',()=>{resetView();draw();});
+document.getElementById('btn-reset-zoom').addEventListener('click',()=>{zoomAround(1.0,canvas.width/2,canvas.height/2);draw();});
+btnUndo.addEventListener('click',undo);btnRedo.addEventListener('click',redo);
+toggleGrid.addEventListener('change',()=>{state.showGrid=toggleGrid.checked;draw();});
+gridSizeIn.addEventListener('change',()=>{const v=parseInt(gridSizeIn.value,10);if(!isNaN(v)&&v>0){state.cellFt=v;draw();}});
+
+// ── Init ──────────────────────────────────────────────────────────
+buildPalette();
+refreshTokenList();
+refreshInitiativeList();
+buildTileCache().then(()=>{resizeCanvas();resetView();draw();});
+
+// ================================================================
+//  PHASE 5 — MULTIPLAYER (WebSocket)
+// ================================================================
+
+// ── Remote cursor state ──────────────────────────────────────────
+const remoteCursors=new Map(); // clientId → {wx,wy,name,color}
+
+function drawRemoteCursors(c){
+  for(const[cid,cur]of remoteCursors){
+    const{x:sx,y:sy}=worldToScreen(cur.wx,cur.wy);
+    c.save();
+    // Cursor dot
+    c.beginPath();c.arc(sx,sy,5,0,Math.PI*2);
+    c.fillStyle=cur.color||'#d4a843';c.fill();
+    c.strokeStyle='rgba(0,0,0,0.6)';c.lineWidth=1;c.stroke();
+    // Name label
+    if(cur.name){
+      c.font='10px Cinzel,serif';c.textAlign='left';c.textBaseline='middle';
+      const pad=4,tw=c.measureText(cur.name).width;
+      c.fillStyle='rgba(13,11,8,0.8)';
+      c.fillRect(sx+8,sy-8,tw+pad*2,16);
+      c.fillStyle=cur.color||'#d4a843';
+      c.fillText(cur.name,sx+8+pad,sy);
+    }
+    c.restore();
+  }
+}
+
+// ── WebSocket core ───────────────────────────────────────────────
+let wsConn=null;
+let myClientId=null;
+let applyingRemote=false;
+
+// Assign this browser a random player color that persists for the session
+const MY_CURSOR_COLORS=['#e03030','#2060d0','#28a028','#8030b0','#d06010','#1a9090','#c03080','#d4a843'];
+const myColor=MY_CURSOR_COLORS[Math.floor(Math.random()*MY_CURSOR_COLORS.length)];
+
+function wsSend(msg){
+  if(wsConn&&wsConn.readyState===WebSocket.OPEN)wsConn.send(JSON.stringify(msg));
+}
+
+function wsSetStatus(status,label){
+  const dot=document.getElementById('mp-dot');
+  const lbl=document.getElementById('mp-label');
+  dot.className='mp-dot '+status;
+  lbl.textContent=label;
+}
+
+function wsSetDialogMsg(msg,color){
+  const el=document.getElementById('mp-status-msg');
+  el.textContent=msg;
+  el.style.color=color||'var(--ink-dim)';
+}
+
+function wsConnect(url,name){
+  if(wsConn){wsConn.onclose=null;wsConn.close();}
+  wsSetStatus('connecting','Connecting…');
+  wsSetDialogMsg('Connecting…','var(--accent-gold)');
+  wsConn=new WebSocket(url);
+
+  wsConn.onopen=()=>{
+    wsSetStatus('connected','Online');
+    // Announce ourselves
+    wsSend({type:'client_info',name,color:myColor});
+    // Share current map with the room
+    wsSend({type:'full_state',state:JSON.parse(serializeMap())});
+    wsSetDialogMsg('Connected!','#28a028');
+    document.getElementById('mp-btn-row-connect').style.display='none';
+    document.getElementById('mp-btn-row-disconnect').style.display='flex';
+  };
+
+  wsConn.onclose=()=>{
+    wsSetStatus('disconnected','Offline');
+    wsSetDialogMsg('Disconnected.');
+    remoteCursors.clear();
+    document.getElementById('mp-user-list').style.display='none';
+    document.getElementById('mp-btn-row-connect').style.display='flex';
+    document.getElementById('mp-btn-row-disconnect').style.display='none';
+    draw();
+  };
+
+  wsConn.onerror=()=>{
+    wsSetStatus('error','Error');
+    wsSetDialogMsg('Could not connect — is the server running?','var(--accent-ember)');
+  };
+
+  wsConn.onmessage=(e)=>{
+    let msg;try{msg=JSON.parse(e.data);}catch{return;}
+    applyRemoteMsg(msg);
+  };
+}
+
+function wsDisconnect(){
+  if(wsConn){wsConn.onclose=null;wsConn.close();wsConn=null;}
+  wsSetStatus('disconnected','Offline');
+  remoteCursors.clear();
+  document.getElementById('mp-btn-row-connect').style.display='flex';
+  document.getElementById('mp-btn-row-disconnect').style.display='none';
+  draw();
+}
+
+// ── Apply incoming messages ───────────────────────────────────────
+function applyRemoteMsg(msg){
+  applyingRemote=true;
+  try{
+    switch(msg.type){
+      case 'your_id':
+        myClientId=msg.id;
+        break;
+
+      case 'user_list':{
+        const ul=document.getElementById('mp-user-list');
+        ul.style.display=msg.users.length?'flex':'none';
+        ul.innerHTML='';
+        for(const u of msg.users){
+          const row=document.createElement('div');row.className='mp-user-row';
+          const dot=document.createElement('div');dot.className='mp-user-dot';dot.style.background=u.color;
+          const name=document.createElement('span');name.textContent=u.name;
+          const you=u.id===myClientId?'(you)':'';
+          if(you){const y=document.createElement('span');y.className='mp-user-you';y.textContent=you;row.appendChild(dot);row.appendChild(name);row.appendChild(y);}
+          else{row.appendChild(dot);row.appendChild(name);}
+          ul.appendChild(row);
+        }
+        // Update toolbar label
+        const count=msg.users.length;
+        document.getElementById('mp-label').textContent=count>0?`${count} online`:'Online';
+        break;
+      }
+
+      case 'full_state':
+        try{deserializeMap(JSON.stringify(msg.state));}catch(err){console.warn('full_state parse error',err);}
+        break;
+
+      case 'terrain_fill':
+        for(const[k,v]of msg.changes){
+          if(v===null)state.terrain.delete(k);else state.terrain.set(k,v);
+        }
+        draw();
+        break;
+
+      case 'fog_paint':
+        for(const k of(msg.revealed||[]))state.fog.add(k);
+        for(const k of(msg.hidden||[]))state.fog.delete(k);
+        draw();
+        break;
+
+      case 'fog_reveal_all':
+        fogRevealAll();draw();
+        break;
+
+      case 'fog_hide_all':
+        fogHideAll();draw();
+        break;
+
+      case 'token_add':{
+        const tok=makeToken(msg.token);
+        tok.id=msg.token.id;
+        tok.conditions=new Set(msg.token.conditions||[]);
+        if(msg.token.id>=tokenIdCounter)tokenIdCounter=msg.token.id+1;
+        state.tokens.set(tok.id,tok);
+        refreshTokenList();refreshInitiativeList();draw();
+        break;
+      }
+
+      case 'token_move':{
+        const tok=state.tokens.get(msg.id);
+        if(tok){tok.col=msg.col;tok.row=msg.row;refreshTokenList();draw();}
+        break;
+      }
+
+      case 'token_update':{
+        const tok=state.tokens.get(msg.id);
+        if(tok){
+          const ch=msg.changes;
+          if(ch.name!==undefined)tok.name=ch.name;
+          if(ch.label!==undefined)tok.label=ch.label;
+          if(ch.hpCurrent!==undefined)tok.hpCurrent=ch.hpCurrent;
+          if(ch.hpMax!==undefined)tok.hpMax=ch.hpMax;
+          if(ch.initiative!==undefined)tok.initiative=ch.initiative;
+          if(ch.color!==undefined)tok.color=ch.color;
+          if(ch.size!==undefined)tok.size=ch.size;
+          if(ch.conditions!==undefined)tok.conditions=new Set(ch.conditions);
+          updateEditorPanel();refreshTokenList();refreshInitiativeList();draw();
+        }
+        break;
+      }
+
+      case 'token_remove':
+        if(state.selectedTokenId===msg.id){state.selectedTokenId=null;updateEditorPanel();}
+        state.tokens.delete(msg.id);
+        refreshTokenList();refreshInitiativeList();draw();
+        break;
+
+      case 'initiative_update':
+        state.currentTurnIdx=msg.currentTurnIdx;
+        state.round=msg.round;
+        // Sync individual initiative values
+        if(msg.values){for(const[id,val]of Object.entries(msg.values)){const t=state.tokens.get(Number(id));if(t)t.initiative=val;}}
+        refreshInitiativeList();
+        break;
+
+      case 'map_clear':
+        state.terrain.clear();state.tokens.clear();state.fog.clear();
+        state.selectedTokenId=null;state.undoStack=[];state.redoStack=[];
+        updateUndoButtons();updateEditorPanel();refreshTokenList();refreshInitiativeList();
+        resetView();draw();
+        break;
+
+      case 'cursor_move':
+        if(msg.clientId!==myClientId){
+          remoteCursors.set(msg.clientId,{wx:msg.wx,wy:msg.wy,name:msg.name,color:msg.color});
+          draw();
+        }
+        break;
+
+      case 'cursor_leave':
+        remoteCursors.delete(msg.clientId);
+        draw();
+        break;
+    }
+  }finally{applyingRemote=false;}
+}
+
+// ── Throttled cursor broadcast ────────────────────────────────────
+let cursorThrottle=0;
+const CURSOR_THROTTLE_MS=40;
+
+// ── Session dialog UI ─────────────────────────────────────────────
+document.getElementById('btn-mp-session').addEventListener('click',()=>{
+  document.getElementById('mp-dialog').classList.add('open');
+});
+function closeDialog(){document.getElementById('mp-dialog').classList.remove('open');}
+document.getElementById('mp-do-cancel').addEventListener('click',closeDialog);
+document.getElementById('mp-do-cancel2').addEventListener('click',closeDialog);
+document.getElementById('mp-do-connect').addEventListener('click',()=>{
+  const url=document.getElementById('mp-url-input').value.trim()||'ws://localhost:8765';
+  const name=document.getElementById('mp-name-input').value.trim()||'Player';
+  wsConnect(url,name);
+});
+document.getElementById('mp-do-disconnect').addEventListener('click',()=>{
+  wsDisconnect();
+  wsSetDialogMsg('');
+  document.getElementById('mp-user-list').style.display='none';
+});
+// Close dialog on backdrop click
+document.getElementById('mp-dialog').addEventListener('click',(e)=>{if(e.target===e.currentTarget)closeDialog();});
+</script>
+</body>
+</html>
