@@ -9,7 +9,7 @@
   :root {
     --bg-deep:       #0d0b08;
     --bg-panel:      #1a1510;
-    --bg-panel-mid:  #221c14;
+    --bg-panel-mid:  #221c14;h
     --border-dim:    #3d3020;
     --border-glow:   #6b4f28;
     --parchment:     #c8a96e;
@@ -531,7 +531,7 @@
     <div class="mp-box-title">⚔ Live Session</div>
     <div class="mp-field">
       <label>Server URL</label>
-      <input id="mp-url-input" type="text" value="ws://localhost:8765" placeholder="ws://localhost:8765">
+      <input id="mp-url-input" type="text" value="wss://dnd-battlemap-production.up.railway.app" placeholder="wss://dnd-battlemap-production.up.railway.app">
     </div>
     <div class="mp-field">
       <label>Your Name</label>
@@ -1586,7 +1586,7 @@ function closeDialog(){document.getElementById('mp-dialog').classList.remove('op
 document.getElementById('mp-do-cancel').addEventListener('click',closeDialog);
 document.getElementById('mp-do-cancel2').addEventListener('click',closeDialog);
 document.getElementById('mp-do-connect').addEventListener('click',()=>{
-  const url=document.getElementById('mp-url-input').value.trim()||'ws://localhost:8765';
+  const url=document.getElementById('mp-url-input').value.trim()||'wss://dnd-battlemap-production.up.railway.app';
   const name=document.getElementById('mp-name-input').value.trim()||'Player';
   wsConnect(url,name);
 });
